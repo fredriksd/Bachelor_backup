@@ -42,7 +42,7 @@ class PWM():
 			self.position = self.u0 + vel
 			#Begrenser utslagene på servoutgangen mellom 1000us
 			#og 2000us.
-			self.position = constrain(self.position, 1400, 1600)
+			self.position = constrain(self.position, 1000, 2000)
 
 			return self.position
 

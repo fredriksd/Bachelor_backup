@@ -22,8 +22,8 @@ THROTTLE = '3'
 NAV_MODE = "ALT_HOLD"
 MANUAL_ANGLE = 4500
 NAV_ANGLE = 1000
-pwm_roll = PWM(P_gain = 200, D_gain = 200, inverted = True) 
-pwm_pitch = PWM(P_gain = 200, D_gain = 200, inverted = True) #INVERTERT BARE I SITL
+pwm_roll = PWM(P_gain = 300, D_gain = 250, inverted = True) 
+pwm_pitch = PWM(P_gain = 300, D_gain = 250, inverted = True) #INVERTERT BARE I SITL
 #####
 
 ####PIXEL-SETTPUNKTER####
@@ -249,7 +249,6 @@ if __name__ == "__main__":
             time.sleep(0.5)
             searching = False
             break
-            #manual_flight()
 
         #Begynn ny iterasjon dersom søkinga har sviktet. 
         if not searching:
@@ -271,8 +270,8 @@ if __name__ == "__main__":
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
           
-          print "Error_x: %d" % error_x
-          print "Error_y %d" % error_y
+         # print "Error_x: %d" % error_x
+         # print "Error_y %d" % error_y
 
           vehicle.channels.overrides = {THROTTLE: 1500, ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
           time.sleep(0.1)
