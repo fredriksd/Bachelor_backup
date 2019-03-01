@@ -9,6 +9,7 @@ import argparse
 import exceptions
 import socket
 from pixy_spi import PWM, get_Pixy, bit_to_pixel
+from write_to_file import write_to_file
 
 #Parametre 
 lost = False
@@ -211,7 +212,51 @@ def pixy_search():
   if ROLL and PITCH in vehicle.channels.overrides and lost_counter == 40:
     return False
   
+def analyze():
+  '''Plotter prosessutgangene for pitch og roll samt 
+    deres feilverdier etter at fartøyet har landet. 
+    Disse plottene lagres som egne *.png - filer.
+  '''
+  import matplotlib.pyplot as plt
+  i = 1
 
+  for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
+    with open(filename, 'r') as file:
+      file_input = file.read().split('\n')
+      output = [] 
+      data = []
+      dataTime = []
+      for row in file_input:
+          output.append(row.split(','))
+      #print output
+
+      for row in output:
+        if len(row) != 1:
+          data.append(row[0])
+          dataTime.append(row[1])
+        #print row
+          
+      plt.figure(i)
+      plt.plot(data, dataTime, markersize = 1, linestyle = 'solid')
+      plt.xlabel('Tid [s]')
+      if i == 1:
+        plt.title('Y: Prosessutgang')
+        plt.ylabel('Prosessutgang [Pixel')
+        plt.savefig('yfig.png')
+      elif i == 2:
+        plt.title('X: Prosessutgang')
+        plt.ylabel('Prosessutgang [Pixel]')
+        plt.savefig('xfig.png')
+      elif i == 3:
+        plt.title('X: Feil')
+        plt.ylabel('Feil [Pixel]')
+        plt.savefig('xfeil.png')
+      elif i == 4:
+        plt.title('Y: Feil')
+        plt.ylabel('Feil [Pixel]')
+        plt.savefig('yfeil.png')
+      
+    i += 1  
 
 
 #MAIN PROGRAM
@@ -246,6 +291,9 @@ if __name__ == "__main__":
 
           if not pixy_search():
             print 'Lost track of point...'
+            #Resetter Firstupdate-variabelen for å resette telling. 
+            pwm_pitch.firstupdate = True
+            pwm_roll.firstupdate = True
             time.sleep(0.5)
             searching = False
             break
@@ -269,6 +317,11 @@ if __name__ == "__main__":
         
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
+
+          write_to_file(send[0], pwm_roll.sample, 'y_utgang')
+          write_to_file(send[1], pwm_pitch.sample, 'x_utgang')
+          write_to_file(error_x, pwm_roll.sample, 'x_feil')
+          write_to_file(error_y, pwm_pitch.position, 'y_feil')
           
          # print "Error_x: %d" % error_x
          # print "Error_y %d" % error_y
@@ -294,5 +347,6 @@ if __name__ == "__main__":
     vehicle.mode = VehicleMode('LOITER')
     time.sleep(0.3)
     vehicle.close()
+    analyze() 
   
   vehicle.close()

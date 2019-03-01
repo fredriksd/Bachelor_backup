@@ -31,6 +31,8 @@ class PWM():
 		self.D_gain = D_gain
 		self.previous_error = 0
 		self.position = 0
+		self.start = 0
+		self.sample = 0
 
 	def update(self, error):
 		if self.inverted:
@@ -38,16 +40,17 @@ class PWM():
 		if self.firstupdate == False:
 			error_delta = error - self.previous_error
 			vel = (self.P_gain * error + error_delta * self.D_gain)/1024
-
 			self.position = self.u0 + vel
 			#Begrenser utslagene på servoutgangen mellom 1000us
 			#og 2000us.
 			self.position = constrain(self.position, 1000, 2000)
+			self.sample = time.time() - self.start
 
 			return self.position
 
 		else:
 			self.firstupdate = False
+			self.start = time.time()
 		self.previous_error = error
 
 
