@@ -2,6 +2,7 @@
 
 import spidev
 import time
+import RPi.GPIO as GPIO
 
 spi = spidev.SpiDev()
 spi.open(0, 0)
@@ -9,6 +10,10 @@ spi.max_speed_hz = 1000000
 spi.mode = 0b00
 spi.cshigh = False
 
+search_light = 21
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(search_light, GPIO.OUT)
 
 
 
@@ -77,6 +82,7 @@ def get_Pixy():
 	
 	while resp[0] == 0 and resp[1] == 0 or not resp:
 		resp = spi.xfer([0xaa55,0xaa55])
+		GPIO.output(search_light, GPIO.LOW)
 		return False
 	if resp[0] == 170 and resp[1] == 85:
 		while i < 7:
@@ -94,7 +100,7 @@ def get_Pixy():
 				send.append(resp[1])
 			time.sleep(0.01)
 			i += 1
-
+		GPIO.output(search_light, GPIO.HIGH)
 	return send
 
 

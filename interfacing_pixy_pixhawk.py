@@ -1,30 +1,40 @@
 #-*- coding:utf-8 -*-
 #!/usr/bin/python
 
-
+import RPi.GPIO as GPIO
 from dronekit import connect, VehicleMode, LocationGlobalRelative, APIException
 from pymavlink import mavutil
 import time
+import datetime
 import argparse
 import exceptions
 import socket
 from pixy_spi import PWM, get_Pixy, bit_to_pixel
 from write_to_file import write_to_file
 
+
 #Parametre 
-lost = False
+
 lost_counter = 0
 searching = True
 
+first_check = True
+
+###GPIO-SETUP###
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+
+#GPIO.output(search_light, GPIO.LOW)
+
 ####RC####
-ROLL = '1'
-PITCH = '2'
-THROTTLE = '3'
-NAV_MODE = "ALT_HOLD"
+ROLL = '2' #HITL: 2 #SITL: 1
+PITCH = '3' #HITL: 3 #SITL: 2
+THROTTLE = '1' #HITL: 1 #SITL: 3
+NAV_MODE = "STABILIZE" #NAV_MODE = "ALT_HOLD"
 MANUAL_ANGLE = 4500
 NAV_ANGLE = 1000
-pwm_roll = PWM(P_gain = 300, D_gain = 250, inverted = True) 
-pwm_pitch = PWM(P_gain = 300, D_gain = 250, inverted = True) #INVERTERT BARE I SITL
+pwm_roll = PWM(P_gain = 700, D_gain = 250, inverted = True) 
+pwm_pitch = PWM(P_gain = 700, D_gain = 250, inverted = False) #INVERTERT BARE I SITL
 #####
 
 ####PIXEL-SETTPUNKTER####
@@ -37,12 +47,10 @@ x_center = (x_max - x_min)/2
 y_center = (y_max - y_min)/2
 ####
 
-is_takeover = False
-
 #SETUP 
 parser = argparse.ArgumentParser()
-parser.add_argument('--connect', default='/dev/serial0',
-	help = 'Connect to vehicle on ip address given. Default set to 127.0.0.1:14550')
+parser.add_argument('--connect', default='udp:127.0.0.1:14550',
+	help = 'Connect to vehicle on ip address given. Default set to udp:127.0.0.1:14550')
 args = parser.parse_args()
 
 # Koble til fartøy
@@ -81,6 +89,7 @@ def rangefinder_callback(self,attr_name):
     last_rangefinder_distance = round(self.rangefinder.distance, 1)
     print " Rangefinder (metres): %s" % last_rangefinder_distance
 '''
+
 @vehicle.on_attribute('mode')   
 def decorated_mode_callback(self, attr_name, value):
     # `attr_name` is the observed attribute (used if callback is used for multiple attributes)
@@ -90,32 +99,35 @@ def decorated_mode_callback(self, attr_name, value):
 
 def takeover():
   '''Funksjon for å sjekke for takeover fra radio eller GCS.'''
-  if not searching: #(ROLL and PITCH in vehicle.channels.overrides and not vehicle.mode.name == NAV_MODE) or not searching:
+  if not searching or vehicle.channels['7'] < 1750: #(ROLL and PITCH in vehicle.channels.overrides and not vehicle.mode.name == NAV_MODE) or not searching:
     return True
-  else:
+  elif 1750 <= vehicle.channels['7'] <= 2012 or (1750 <= vehicle.channels['7'] <= 2012 and searching):
     return False
 
 def manual_flight():
-  global searching
   '''
   Funksjon for manuell flyging. Programmet står i ro mens 
   dronen er kontrollert manuelt. Når vehicle.mode.name == NAV_MODE gå tilbake til pixy_search
   '''
-  vehicle.mode = VehicleMode('LOITER')
-  time.sleep(0.3)
+  global searching
+  
+  #vehicle.mode = VehicleMode('LOITER')
+  time.sleep(0.05)
   potential_counter = 0
-
+  print "Manual flight..."
   vehicle.parameters["ANGLE_MAX"] = MANUAL_ANGLE
-  while vehicle.mode.name != NAV_MODE:
-    print "Manual flight..."
-    time.sleep(0.3)
+  while not searching:
+    
+    time.sleep(0.05)
     potential = get_Pixy()
     if potential and len(potential) == 5:
       potential_counter += 1
     if potential_counter == 3:
-      print "Found point! Returning to %s" % NAV_MODE
-      vehicle.mode = VehicleMode(NAV_MODE)
-      time.sleep(0.3)
+      #print "Found point! Returning to %s" % NAV_MODE
+      print "Found point! Activate NAV mode"
+      #GPIO.output(search_light, GPIO.HIGH)
+      #print vehicle.channels['7'] #NAV
+      time.sleep(0.05)
       vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
       searching = True
       break
@@ -131,28 +143,6 @@ def set_home():
   print "Home location set"
   time.sleep(1)
   print "Home location set at: {}".format(vehicle.home_location)
-
-    
-def arm():
-  print "Basic pre-arm checks"
-  # Don't let the user try to arm until autopilot is ready
-#  while not vehicle.is_armable:
-#    print " Waiting for vehicle to initialise..."
-#    time.sleep(1)
-
-#    while vehicle.gps_0.fix_type < 2:
-#        print "Waiting for GPS", vehicle.gps_0.fix_type
-#        time.sleep(1)
-    
-  print "Arming motors"
-  # Copter should arm in GUIDED mode
-  #vehicle.mode    = VehicleMode("GUIDED")
-  vehicle.mode = VehicleMode("STABILIZE")
-  vehicle.armed   = True
-
-  while not vehicle.armed:
-    print "Waiting for arming..."
-    time.sleep(1)
 
 
 # Function to arm and then takeoff to a user specified altitude
@@ -209,18 +199,19 @@ def pixy_search():
   lost_counter += 1
   time.sleep(0.05)
 
-  if ROLL and PITCH in vehicle.channels.overrides and lost_counter == 40:
+  if ROLL and PITCH in vehicle.channels.overrides and lost_counter == 10:
     return False
-  
+
 def analyze():
   '''Plotter prosessutgangene for pitch og roll samt 
     deres feilverdier etter at fartøyet har landet. 
     Disse plottene lagres som egne *.png - filer.
   '''
   import matplotlib.pyplot as plt
+  plt.interactive(False)
   i = 1
 
-  for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
+  for filename in ('x_utgang.txt', 'y_utgang.txt', 'x_feil.txt','y_feil.txt'):
     with open(filename, 'r') as file:
       file_input = file.read().split('\n')
       output = [] 
@@ -234,67 +225,69 @@ def analyze():
         if len(row) != 1:
           data.append(row[0])
           dataTime.append(row[1])
-        #print row
-          
+      date_name = datetime.datetime.now()
+
       plt.figure(i)
-      plt.plot(data, dataTime, markersize = 1, linestyle = 'solid')
+      plt.plot(dataTime, data, markersize = 1, linestyle = 'solid')
       plt.xlabel('Tid [s]')
       if i == 1:
         plt.title('Y: Prosessutgang')
         plt.ylabel('Prosessutgang [Pixel')
-        plt.savefig('yfig.png')
+        plt.savefig('./figurer/yfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       elif i == 2:
         plt.title('X: Prosessutgang')
         plt.ylabel('Prosessutgang [Pixel]')
-        plt.savefig('xfig.png')
+        plt.savefig('./figurer/xfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       elif i == 3:
         plt.title('X: Feil')
         plt.ylabel('Feil [Pixel]')
-        plt.savefig('xfeil.png')
+        plt.savefig('./figurer/xfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       elif i == 4:
         plt.title('Y: Feil')
         plt.ylabel('Feil [Pixel]')
-        plt.savefig('yfeil.png')
+        plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       
     i += 1  
 
 
 #MAIN PROGRAM
 if __name__ == "__main__":
+
   try:
     
     '''
     Foreløpig for SITL-bruk: Armere og ta av. Deretter navigere inn mot punktet. 
     '''
+    '''
+    ###BARE FOR SITL###
     arm_and_takeoff(10)
     vehicle.mode = VehicleMode(NAV_MODE)
-    vehicle.channels.overrides[THROTTLE] = 1500 #BARE FOR SITL
+    vehicle.channels.overrides[THROTTLE] = 1500 
     time.sleep(0.5)
 
     if vehicle.parameters["ANGLE_MAX"] == MANUAL_ANGLE:
       vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
-
-    
+    ###
+    '''
     while True:
+      #while not vehicle.armed:
+      #  pass
+      send = get_Pixy()
+    
       if not takeover():
         #Dersom gjenoppretting av lyspunkt:
         #Skift tilbake til NAV_MODE og redusere vinkelutslag
-        '''if lost:
-          vehicle.mode = VehicleMode(NAV_MODE)
-          lost_counter = 0
-          vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE '''
 
-        send = get_Pixy()
         while not send:
-          #lag en pixy_search funksjon
           pixy_search()
 
           if not pixy_search():
             print 'Lost track of point...'
+
             #Resetter Firstupdate-variabelen for å resette telling. 
             pwm_pitch.firstupdate = True
             pwm_roll.firstupdate = True
-            time.sleep(0.5)
+            time.sleep(0.05)
             searching = False
             break
 
@@ -303,6 +296,7 @@ if __name__ == "__main__":
           continue
           
         else:
+          
           send = bit_to_pixel(send)
           print send
 
@@ -313,40 +307,48 @@ if __name__ == "__main__":
           pwm_roll.update(error_x)
           pwm_pitch.update(error_y)
 
-          print vehicle.channels
+         # print vehicle.channels
         
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
+          
+          write_to_file(send[0], pwm_roll.sample, 'x_utgang', first_check)
+          write_to_file(send[1], pwm_pitch.sample, 'y_utgang', first_check)
+          write_to_file(error_x, pwm_roll.sample, 'x_feil', first_check)
+          write_to_file(error_y, pwm_pitch.position, 'y_feil', first_check)
+          
+          if first_check == True:
+            first_check = False
 
-          write_to_file(send[0], pwm_roll.sample, 'y_utgang')
-          write_to_file(send[1], pwm_pitch.sample, 'x_utgang')
-          write_to_file(error_x, pwm_roll.sample, 'x_feil')
-          write_to_file(error_y, pwm_pitch.position, 'y_feil')
           
          # print "Error_x: %d" % error_x
          # print "Error_y %d" % error_y
-
-          vehicle.channels.overrides = {THROTTLE: 1500, ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
-          time.sleep(0.1)
+          ###THROTTLE-INPUT ER BARE FOR SITL###
+          vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
+          time.sleep(0.05)
+          
           
       else:
         '''
         Ved takeover fra senderen (som merkes i form av mode-bytte) renses kanaloverskrivelsene
         slik at en kan gjenopprette kontrollen.
         '''
-        print "Tx takeover"
-        time.sleep(0.1)
-        vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
+        #if send = True
+        time.sleep(0.05)
+        vehicle.channels.overrides = {}
+        #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
         manual_flight()
         
 
 
   # Close vehicle object
   except KeyboardInterrupt:
-    vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
+    vehicle.channels.overrides = {} #HITL
+    #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
     vehicle.mode = VehicleMode('LOITER')
     time.sleep(0.3)
     vehicle.close()
+    GPIO.cleanup()
     analyze() 
   
   vehicle.close()
