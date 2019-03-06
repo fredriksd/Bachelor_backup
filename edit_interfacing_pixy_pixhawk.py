@@ -132,18 +132,6 @@ def manual_flight():
       break
 
 
-def set_home():
-  while not vehicle.home_location:
-    cmds = vehicle.commands
-    cmds.download()
-    cmds.wait_ready()
-    print"Waiting for home location..."
-  
-  print "Home location set"
-  time.sleep(1)
-  print "Home location set at: {}".format(vehicle.home_location)
-
-
 # Function to arm and then takeoff to a user specified altitude
 def arm_and_takeoff(aTargetAltitude):
   print"Basic pre-arm checks"
@@ -177,12 +165,6 @@ def arm_and_takeoff(aTargetAltitude):
       break
     time.sleep(1)
 
-def simpleGoto(lat, longi):
-	loc = LocationGlobalRelative(lat, longi)
-	print "moving to ({}, {})".format(lat, longi)
-	vehicle.simple_goto(loc)
-
-
 '''
 Lage en pixy_search funksjon som søker etter pixy OG sjekker swith på kontroller. 
 Hvis vericle.mode.name != NAV_MODE, gå inn i manual_flight funksjon. Når pixy ser objekt, gå videre i "while true" løkka
@@ -200,6 +182,13 @@ Hvis vericle.mode.name != NAV_MODE, gå inn i manual_flight funksjon. Når pixy 
 
 #  if ROLL and PITCH in vehicle.channels.overrides and lost_counter == 5:
 #    return False
+
+def after_landing():
+    vehicle.channels.overrides = {}
+    GPIO.cleanup()
+    vehicle.close()
+    analyze()
+
 
 def analyze():
   '''Plotter prosessutgangene for pitch og roll samt 
@@ -265,9 +254,8 @@ if __name__ == "__main__":
       vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
     ###
     '''
-    while True:
-      #while not vehicle.armed:
-      #  pass
+    while True: #Til HITL kan denne være satt til "while vehicle.armed"
+     
       send = get_Pixy()
 
       if not takeover():
@@ -345,4 +333,5 @@ if __name__ == "__main__":
     GPIO.cleanup()
     analyze() 
   
-  vehicle.close()
+  #Kjøres etter at drona har landet
+  after_landing()
