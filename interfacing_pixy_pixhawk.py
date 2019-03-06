@@ -219,7 +219,7 @@ def analyze():
       dataTime = []
       for row in file_input:
           output.append(row.split(','))
-      #print output
+
 
       for row in output:
         if len(row) != 1:
@@ -255,9 +255,6 @@ if __name__ == "__main__":
 
   try:
     
-    '''
-    Foreløpig for SITL-bruk: Armere og ta av. Deretter navigere inn mot punktet. 
-    '''
     '''
     ###BARE FOR SITL###
     arm_and_takeoff(10)
@@ -307,7 +304,6 @@ if __name__ == "__main__":
           pwm_roll.update(error_x)
           pwm_pitch.update(error_y)
 
-         # print vehicle.channels
         
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
@@ -320,9 +316,6 @@ if __name__ == "__main__":
           if first_check == True:
             first_check = False
 
-          
-         # print "Error_x: %d" % error_x
-         # print "Error_y %d" % error_y
           ###THROTTLE-INPUT ER BARE FOR SITL###
           vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
           time.sleep(0.05)
@@ -333,7 +326,7 @@ if __name__ == "__main__":
         Ved takeover fra senderen (som merkes i form av mode-bytte) renses kanaloverskrivelsene
         slik at en kan gjenopprette kontrollen.
         '''
-        #if send = True
+        
         time.sleep(0.05)
         vehicle.channels.overrides = {}
         #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
