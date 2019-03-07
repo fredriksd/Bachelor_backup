@@ -119,10 +119,11 @@ def manual_flight():
   time.sleep(0.05)
   potential_counter = 0
   print "Manual flight..."
-  print vehicle.channels
+  #print vehicle.channels
   vehicle.parameters["ANGLE_MAX"] = MANUAL_ANGLE
   while not searching:
-    print vehicle.channels
+    #print vehicle.channels
+    print "Searching..."
     time.sleep(0.05)
     potential = get_Pixy()
     if potential and len(potential) == 5:
@@ -183,45 +184,48 @@ def analyze():
     deres feilverdier etter at fartøyet har landet. 
     Disse plottene lagres som egne *.png - filer.
   '''
+
   import matplotlib 
   matplotlib.use('Agg')
   import matplotlib.pyplot as plt
   i = 1
-
   for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
-    with open(filename, 'r') as file:
-      file_input = file.read().split('\n')
-      output = [] 
-      data = []
-      dataTime = []
-      for row in file_input:
-          output.append(row.split(','))
+    if os.path.isfile(filename):
+      with open(filename, 'r') as file:
+        file_input = file.read().split('\n')
+        output = [] 
+        data = []
+        dataTime = []
+        for row in file_input:
+            output.append(row.split(','))
 
-      for row in output:
-        if len(row) != 1:
-          data.append(row[0])
-          dataTime.append(row[1])
-      date_name = datetime.datetime.now()
+        for row in output:
+          if len(row) != 1:
+            data.append(row[0])
+            dataTime.append(row[1])
+        date_name = datetime.datetime.now()
 
-      plt.figure(i)
-      plt.plot(dataTime, data, markersize = 1, linestyle = 'solid')
-      plt.xlabel('Tid [s]')
-      if i == 1:
-        plt.title('Y-pixel: Prosessutgang')
-        plt.ylabel('Prosessutgang [Pixel')
-        plt.savefig('./figurer/yfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
-      elif i == 2:
-        plt.title('X-pixel: Prosessutgang')
-        plt.ylabel('Prosessutgang [Pixel]')
-        plt.savefig('./figurer/xfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
-      elif i == 3:
-        plt.title('X-pixel: Feil')
-        plt.ylabel('Feil [Pixel]')
-        plt.savefig('./figurer/xfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
-      elif i == 4:
-        plt.title('Y-pixel: Feil')
-        plt.ylabel('Feil [Pixel]')
-        plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+        plt.figure(i)
+        plt.plot(dataTime, data, markersize = 1, linestyle = 'solid')
+        plt.xlabel('Tid [s]')
+        if i == 1:
+          plt.title('Y-pixel: Prosessutgang')
+          plt.ylabel('Prosessutgang [Pixel')
+          plt.savefig('./figurer/yfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+        elif i == 2:
+          plt.title('X-pixel: Prosessutgang')
+          plt.ylabel('Prosessutgang [Pixel]')
+          plt.savefig('./figurer/xfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+        elif i == 3:
+          plt.title('X-pixel: Feil')
+          plt.ylabel('Feil [Pixel]')
+          plt.savefig('./figurer/xfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+        elif i == 4:
+          plt.title('Y-pixel: Feil')
+          plt.ylabel('Feil [Pixel]')
+          plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+    else:
+      pass
       
     i += 1  
 def after_landing():
@@ -230,12 +234,14 @@ def after_landing():
   piloten muligheten til å restarte programmet.
   IKKE FERDIG UTVIKLET. 
   '''
+  print "After landing..."
   vehicle.channels.overrides = {}
   analyze()
   indikering(constant = True)
   while not vehicle.armed:
     if vehicle.channels['7'] > 1750:
-      indikering(0.1, 10)
+      indikering(1, 5)
+      indikering(i = -1, constant = True)
       GPIO.cleanup()
       vehicle.close()
       os.execv(sys.executable, ['python'] + sys.argv)
@@ -259,6 +265,7 @@ if __name__ == "__main__":
     #Hvis SF-bryteren blir høy, stopper programmet, 
     #og pi'en slås av.
     while not vehicle.armed:
+      print "Waiting..."
       if vehicle.channels['7'] > 1750:
         print "Shutting down"
         indikering(0.1, 10)
