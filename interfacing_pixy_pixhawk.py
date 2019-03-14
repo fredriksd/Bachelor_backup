@@ -32,7 +32,8 @@ THROTTLE = '1' #HITL: 1 #SITL: 3
 NAV_MODE = "LOITER" #NAV_MODE = "ALT_HOLD"
 RTL_MODE = "RTL"
 MANUAL_ANGLE = 4500
-NAV_ANGLE = 1000
+NAV_ANGLE = MANUAL_ANGLE #Foreløpig verdi for NAV_ANGLE = 1000
+
 pwm_roll = PWM(P_gain = 700, D_gain = 250, inverted = True) 
 pwm_pitch = PWM(P_gain = 700, D_gain = 250, inverted = True) #INVERTERT BARE I SITL
 #####
@@ -177,19 +178,6 @@ def arm_and_takeoff(aTargetAltitude):
       break
     time.sleep(1)
 
-def pixy_search():
-  '''
-  Funksjon for å fortsette å lete etter lyspunkt.
-  Etter en gitt tid returneres 'False' og kontrollen overføres til manuell.
-  '''
-  global lost_counter 
-  print 'Searching...'
-  lost_counter += 1
-  time.sleep(0.05)
-
-  if lost_counter == 10:
-    return False
-
 def analyze():
   '''Plotter prosessutgangene for pitch og roll samt 
     deres feilverdier etter at fartøyet har landet. 
@@ -198,7 +186,6 @@ def analyze():
   import matplotlib 
   matplotlib.use('Agg')
   import matplotlib.pyplot as plt
-  #plt.interactive(False)
   i = 1
 
   for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
@@ -268,14 +255,19 @@ if __name__ == "__main__":
     indikering(0.5, 2)
     indikering(0.1, 10)
 
+    #Mens dronen står på bakken disarmert, venter koden.
+    #Hvis SF-bryteren blir høy, stopper programmet, 
+    #og pi'en slås av.
     while not vehicle.armed:
       if vehicle.channels['7'] > 1750:
         print "Shutting down"
         indikering(0.1, 10)
         os.system("sudo shutdown -h now")
-      pass
+      else:
+        pass
+
     indikering(0.05, 20)
-    while vehicle.armed: #Til HITL kan denne være satt til "while vehicle.armed"
+    while vehicle.armed: #While True:
       send = get_Pixy()
     
       if not takeover():
@@ -291,9 +283,9 @@ if __name__ == "__main__":
             pass         
 
         while not send:
-          #pixy_search()
           send = get_Pixy()
           lost_counter += 1
+          time.sleep(0.05)
 
           if lost_counter == 5: #if not pixy_search():
             print 'Lost track of point...'
@@ -348,7 +340,7 @@ if __name__ == "__main__":
         manual_flight()
         
 
-  # Close vehicle object
+  # Close vehicle object when testing
   except KeyboardInterrupt:
     vehicle.channels.overrides = {} #HITL
     #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
@@ -358,6 +350,6 @@ if __name__ == "__main__":
     GPIO.cleanup()
     analyze() 
   
-#Analyserer og starter programmet på nytt.
+#Analyserer og starter eventuelt programmet på nytt om ønsket.
   after_landing()
   
