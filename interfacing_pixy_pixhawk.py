@@ -15,7 +15,6 @@ import sys
 import os
 
 #Parametre 
-
 lost_counter = 0
 searching = True
 
@@ -25,13 +24,13 @@ first_check = True
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
-#GPIO.output(search_light, GPIO.LOW)
 
 ####RC####
 ROLL = '2' #HITL: 2 #SITL: 1
 PITCH = '3' #HITL: 3 #SITL: 2
 THROTTLE = '1' #HITL: 1 #SITL: 3
 NAV_MODE = "LOITER" #NAV_MODE = "ALT_HOLD"
+RTL_MODE = "RTL"
 MANUAL_ANGLE = 4500
 NAV_ANGLE = 1000
 pwm_roll = PWM(P_gain = 700, D_gain = 250, inverted = True) 
@@ -98,6 +97,10 @@ def decorated_mode_callback(self, attr_name, value):
     # `value` is the updated attribute value.
     print "CALLBACK: Mode changed to", value
 
+def RTL_failsafe():
+  if vehicle.mode.name == RTL_MODE:
+    return True
+
 def takeover():
   '''Funksjon for å sjekke for takeover fra radio eller GCS.'''
   if not searching or vehicle.channels['7'] < 1750: #(ROLL and PITCH in vehicle.channels.overrides and not vehicle.mode.name == NAV_MODE) or not searching:
@@ -125,9 +128,8 @@ def manual_flight():
       potential_counter += 1
     if potential_counter == 3:
       print "Found point! Activate NAV mode"
-      #print vehicle.channels['7'] #NAV
       time.sleep(0.05)
-      vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
+      #vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
       searching = True
 
 def set_home():
@@ -193,11 +195,13 @@ def analyze():
     deres feilverdier etter at fartøyet har landet. 
     Disse plottene lagres som egne *.png - filer.
   '''
+  import matplotlib 
+  matplotlib.use('Agg')
   import matplotlib.pyplot as plt
-  plt.interactive(False)
+  #plt.interactive(False)
   i = 1
 
-  for filename in ('x_utgang.txt', 'y_utgang.txt', 'x_feil.txt','y_feil.txt'):
+  for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
     with open(filename, 'r') as file:
       file_input = file.read().split('\n')
       output = [] 
@@ -205,7 +209,6 @@ def analyze():
       dataTime = []
       for row in file_input:
           output.append(row.split(','))
-
 
       for row in output:
         if len(row) != 1:
@@ -217,52 +220,50 @@ def analyze():
       plt.plot(dataTime, data, markersize = 1, linestyle = 'solid')
       plt.xlabel('Tid [s]')
       if i == 1:
-        plt.title('Y: Prosessutgang')
+        plt.title('Y-pixel: Prosessutgang')
         plt.ylabel('Prosessutgang [Pixel')
         plt.savefig('./figurer/yfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       elif i == 2:
-        plt.title('X: Prosessutgang')
+        plt.title('X-pixel: Prosessutgang')
         plt.ylabel('Prosessutgang [Pixel]')
         plt.savefig('./figurer/xfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       elif i == 3:
-        plt.title('X: Feil')
+        plt.title('X-pixel: Feil')
         plt.ylabel('Feil [Pixel]')
         plt.savefig('./figurer/xfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       elif i == 4:
-        plt.title('Y: Feil')
+        plt.title('Y-pixel: Feil')
         plt.ylabel('Feil [Pixel]')
         plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       
     i += 1  
 def after_landing():
+  '''
+  After landing - liste som analyserer dataen fra pixycam, renser overrides og gir 
+  piloten muligheten til å restarte programmet.
+  IKKE FERDIG UTVIKLET. 
+  '''
   vehicle.channels.overrides = {}
-  #GPIO.cleanup()
   analyze()
+  indikering(constant = True)
   while not vehicle.armed:
     if vehicle.channels['7'] > 1750:
       indikering(0.1, 10)
       GPIO.cleanup()
       vehicle.close()
-      os.system("sudo shutdown -r now")
-  pass
-
-  
+      os.execv(sys.executable, ['python'] + sys.argv)
+    pass
 
 #MAIN PROGRAM
 if __name__ == "__main__":
 
   try:
-    
     '''
     ###BARE FOR SITL###
     arm_and_takeoff(10)
     vehicle.mode = VehicleMode(NAV_MODE)
     vehicle.channels.overrides[THROTTLE] = 1500 
     time.sleep(0.5)
-
-    if vehicle.parameters["ANGLE_MAX"] == MANUAL_ANGLE:
-      vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
-    ###
     '''
     indikering(0.5, 2)
     indikering(0.1, 10)
@@ -282,6 +283,12 @@ if __name__ == "__main__":
         #Skift tilbake til NAV_MODE og redusere vinkelutslag
         if vehicle.mode.name != NAV_MODE:
           vehicle.mode = VehicleMode(NAV_MODE)
+          vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
+        
+        if RTL_failsafe():
+          vehicle.channels.overrides = {}
+          while True:
+            pass         
 
         while not send:
           #pixy_search()
@@ -302,8 +309,7 @@ if __name__ == "__main__":
         if not searching:
           continue
           
-        else:
-          
+        else:          
           send = bit_to_pixel(send)
           print send
 
@@ -322,7 +328,7 @@ if __name__ == "__main__":
           write_to_file(send[1], pwm_pitch.sample, 'y_utgang', first_check)
           write_to_file(error_x, pwm_roll.sample, 'x_feil', first_check)
           write_to_file(error_y, pwm_pitch.position, 'y_feil', first_check)
-          
+
           if first_check == True:
             first_check = False
 
@@ -342,7 +348,6 @@ if __name__ == "__main__":
         manual_flight()
         
 
-
   # Close vehicle object
   except KeyboardInterrupt:
     vehicle.channels.overrides = {} #HITL
@@ -356,4 +361,3 @@ if __name__ == "__main__":
 #Analyserer og starter programmet på nytt.
   after_landing()
   
-  #os.execv(__file__, sys.argv)

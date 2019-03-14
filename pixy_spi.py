@@ -15,11 +15,12 @@ search_light = 21
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(search_light, GPIO.OUT)
 
-
-
 #Legge den i en egen fil? Litt "ryddigere"
 #Begrenser val mellom min_ og max_
 def constrain(val, min_, max_):
+	'''
+	Låser en variable mellom min_ og max_ - verdiene satt.
+	'''
 	return max(min(max_,val),min_)
 
 
@@ -74,18 +75,22 @@ def bit_to_pixel(bit):
 	return bit
 
 
-def indikering(t, i):
+def indikering(t = 0, i = 0, constant = False):
 	'''
 	Blinking av grønt lys for indikering av status.
 	t = tid, i = antall ganger
 	'''
-	x = 0
-	while x < i:
-		GPIO.output(search_light,GPIO.HIGH)
-		time.sleep(t)
-		GPIO.output(search_light,GPIO.LOW)
-		time.sleep(t)
-		x += 1
+
+	if constant:
+		GPIO.output(search_light, GPIO.HIGH)
+	else:
+		x = 0
+		while x < i:
+			GPIO.output(search_light,GPIO.HIGH)
+			time.sleep(t)
+			GPIO.output(search_light,GPIO.LOW)
+			time.sleep(t)
+			x += 1
 
 def get_Pixy():
 	send = []
