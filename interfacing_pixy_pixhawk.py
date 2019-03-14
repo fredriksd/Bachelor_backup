@@ -9,9 +9,10 @@ import datetime
 import argparse
 import exceptions
 import socket
-from pixy_spi import PWM, get_Pixy, bit_to_pixel
+from pixy_spi import PWM, get_Pixy, bit_to_pixel, indikering
 from write_to_file import write_to_file
-
+import sys
+import os
 
 #Parametre 
 
@@ -30,11 +31,11 @@ GPIO.setwarnings(False)
 ROLL = '2' #HITL: 2 #SITL: 1
 PITCH = '3' #HITL: 3 #SITL: 2
 THROTTLE = '1' #HITL: 1 #SITL: 3
-NAV_MODE = "STABILIZE" #NAV_MODE = "ALT_HOLD"
+NAV_MODE = "LOITER" #NAV_MODE = "ALT_HOLD"
 MANUAL_ANGLE = 4500
 NAV_ANGLE = 1000
 pwm_roll = PWM(P_gain = 700, D_gain = 250, inverted = True) 
-pwm_pitch = PWM(P_gain = 700, D_gain = 250, inverted = False) #INVERTERT BARE I SITL
+pwm_pitch = PWM(P_gain = 700, D_gain = 250, inverted = True) #INVERTERT BARE I SITL
 #####
 
 ####PIXEL-SETTPUNKTER####
@@ -106,32 +107,28 @@ def takeover():
 
 def manual_flight():
   '''
-  Funksjon for manuell flyging. Programmet står i ro mens 
-  dronen er kontrollert manuelt. Når vehicle.mode.name == NAV_MODE gå tilbake til pixy_search
+  Funksjon for manuell flyging. Programmet leter enda etter lyspunkt mens 
+  dronen er kontrollert manuelt. 
   '''
   global searching
   
-  #vehicle.mode = VehicleMode('LOITER')
   time.sleep(0.05)
   potential_counter = 0
   print "Manual flight..."
+  print vehicle.channels
   vehicle.parameters["ANGLE_MAX"] = MANUAL_ANGLE
   while not searching:
-    
+    print vehicle.channels
     time.sleep(0.05)
     potential = get_Pixy()
     if potential and len(potential) == 5:
       potential_counter += 1
     if potential_counter == 3:
-      #print "Found point! Returning to %s" % NAV_MODE
       print "Found point! Activate NAV mode"
-      #GPIO.output(search_light, GPIO.HIGH)
       #print vehicle.channels['7'] #NAV
       time.sleep(0.05)
       vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
       searching = True
-      break
-
 
 def set_home():
   while not vehicle.home_location:
@@ -178,17 +175,6 @@ def arm_and_takeoff(aTargetAltitude):
       break
     time.sleep(1)
 
-def simpleGoto(lat, longi):
-	loc = LocationGlobalRelative(lat, longi)
-	print "moving to ({}, {})".format(lat, longi)
-	vehicle.simple_goto(loc)
-
-
-'''
-Lage en pixy_search funksjon som søker etter pixy OG sjekker swith på kontroller. 
-Hvis vericle.mode.name != NAV_MODE, gå inn i manual_flight funksjon. Når pixy ser objekt, gå videre i "while true" løkka
-'''
-
 def pixy_search():
   '''
   Funksjon for å fortsette å lete etter lyspunkt.
@@ -199,7 +185,7 @@ def pixy_search():
   lost_counter += 1
   time.sleep(0.05)
 
-  if ROLL and PITCH in vehicle.channels.overrides and lost_counter == 10:
+  if lost_counter == 10:
     return False
 
 def analyze():
@@ -248,7 +234,19 @@ def analyze():
         plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
       
     i += 1  
+def after_landing():
+  vehicle.channels.overrides = {}
+  #GPIO.cleanup()
+  analyze()
+  while not vehicle.armed:
+    if vehicle.channels['7'] > 1750:
+      indikering(0.1, 10)
+      GPIO.cleanup()
+      vehicle.close()
+      os.system("sudo shutdown -r now")
+  pass
 
+  
 
 #MAIN PROGRAM
 if __name__ == "__main__":
@@ -266,19 +264,31 @@ if __name__ == "__main__":
       vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
     ###
     '''
-    while True:
-      #while not vehicle.armed:
-      #  pass
+    indikering(0.5, 2)
+    indikering(0.1, 10)
+
+    while not vehicle.armed:
+      if vehicle.channels['7'] > 1750:
+        print "Shutting down"
+        indikering(0.1, 10)
+        os.system("sudo shutdown -h now")
+      pass
+    indikering(0.05, 20)
+    while vehicle.armed: #Til HITL kan denne være satt til "while vehicle.armed"
       send = get_Pixy()
     
       if not takeover():
         #Dersom gjenoppretting av lyspunkt:
         #Skift tilbake til NAV_MODE og redusere vinkelutslag
+        if vehicle.mode.name != NAV_MODE:
+          vehicle.mode = VehicleMode(NAV_MODE)
 
         while not send:
-          pixy_search()
+          #pixy_search()
+          send = get_Pixy()
+          lost_counter += 1
 
-          if not pixy_search():
+          if lost_counter == 5: #if not pixy_search():
             print 'Lost track of point...'
 
             #Resetter Firstupdate-variabelen for å resette telling. 
@@ -319,8 +329,7 @@ if __name__ == "__main__":
           ###THROTTLE-INPUT ER BARE FOR SITL###
           vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
           time.sleep(0.05)
-          
-          
+           
       else:
         '''
         Ved takeover fra senderen (som merkes i form av mode-bytte) renses kanaloverskrivelsene
@@ -344,4 +353,7 @@ if __name__ == "__main__":
     GPIO.cleanup()
     analyze() 
   
-  vehicle.close()
+#Analyserer og starter programmet på nytt.
+  after_landing()
+  
+  #os.execv(__file__, sys.argv)

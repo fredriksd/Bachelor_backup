@@ -74,6 +74,18 @@ def bit_to_pixel(bit):
 	return bit
 
 
+def indikering(t, i):
+	'''
+	Blinking av grønt lys for indikering av status.
+	t = tid, i = antall ganger
+	'''
+	x = 0
+	while x < i:
+		GPIO.output(search_light,GPIO.HIGH)
+		time.sleep(t)
+		GPIO.output(search_light,GPIO.LOW)
+		time.sleep(t)
+		x += 1
 
 def get_Pixy():
 	send = []
