@@ -29,10 +29,10 @@ GPIO.setwarnings(False)
 ROLL = '2' #HITL: 2 #SITL: 1
 PITCH = '3' #HITL: 3 #SITL: 2
 THROTTLE = '1' #HITL: 1 #SITL: 3
-NAV_MODE = "LOITER" #NAV_MODE = "ALT_HOLD"
+NAV_MODE = "STABILIZE" #NAV_MODE = "ALT_HOLD"
 RTL_MODE = "RTL"
 MANUAL_ANGLE = 4500
-NAV_ANGLE = MANUAL_ANGLE #Foreløpig verdi for NAV_ANGLE = 1000
+NAV_ANGLE = 3000 #Foreløpig verdi for NAV_ANGLE = 1000
 
 pwm_roll = PWM(P_gain = 700, D_gain = 250, inverted = True) 
 pwm_pitch = PWM(P_gain = 700, D_gain = 250, inverted = True) #INVERTERT BARE I SITL
@@ -119,7 +119,6 @@ def manual_flight():
   time.sleep(0.05)
   potential_counter = 0
   print "Manual flight..."
-  #print vehicle.channels
   vehicle.parameters["ANGLE_MAX"] = MANUAL_ANGLE
   while not searching:
     #print vehicle.channels
@@ -131,7 +130,6 @@ def manual_flight():
     if potential_counter == 3:
       print "Found point! Activate NAV mode"
       time.sleep(0.05)
-      #vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
       searching = True
 
 def set_home():
@@ -184,7 +182,6 @@ def analyze():
     deres feilverdier etter at fartøyet har landet. 
     Disse plottene lagres som egne *.png - filer.
   '''
-
   import matplotlib 
   matplotlib.use('Agg')
   import matplotlib.pyplot as plt
@@ -232,7 +229,6 @@ def after_landing():
   '''
   After landing - liste som analyserer dataen fra pixycam, renser overrides og gir 
   piloten muligheten til å restarte programmet.
-  IKKE FERDIG UTVIKLET. 
   '''
   print "After landing..."
   vehicle.channels.overrides = {}
@@ -241,11 +237,11 @@ def after_landing():
   while not vehicle.armed:
     if vehicle.channels['7'] > 1750:
       indikering(1, 5)
-      indikering(i = -1, constant = True)
       GPIO.cleanup()
       vehicle.close()
       os.execv(sys.executable, ['python'] + sys.argv)
-    pass
+    else:
+      pass  
 
 #MAIN PROGRAM
 if __name__ == "__main__":
@@ -282,7 +278,9 @@ if __name__ == "__main__":
         #Skift tilbake til NAV_MODE og redusere vinkelutslag
         if vehicle.mode.name != NAV_MODE:
           vehicle.mode = VehicleMode(NAV_MODE)
+          time.sleep(0.05)
           vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
+          time.sleep(0.05)
         
         if RTL_failsafe():
           vehicle.channels.overrides = {}
@@ -323,10 +321,10 @@ if __name__ == "__main__":
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
           
-          write_to_file(send[0], pwm_roll.sample, 'x_utgang', first_check)
-          write_to_file(send[1], pwm_pitch.sample, 'y_utgang', first_check)
-          write_to_file(error_x, pwm_roll.sample, 'x_feil', first_check)
-          write_to_file(error_y, pwm_pitch.position, 'y_feil', first_check)
+          write_to_file(send[0], pwm_roll.stample, 'x_utgang', first_check)
+          write_to_file(send[1], pwm_pitch.stample, 'y_utgang', first_check)
+          write_to_file(error_x, pwm_roll.stample, 'x_feil', first_check)
+          write_to_file(error_y, pwm_pitch.stample, 'y_feil', first_check)
 
           if first_check == True:
             first_check = False

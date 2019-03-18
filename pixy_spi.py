@@ -13,6 +13,7 @@ spi.cshigh = False
 search_light = 21
 
 GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
 GPIO.setup(search_light, GPIO.OUT)
 
 #Legge den i en egen fil? Litt "ryddigere"
@@ -29,34 +30,51 @@ class PWM():
 	og kan inverteres etter behov.
 	'''
 
-	def __init__(self,initial_position = 1500, P_gain = 400, D_gain = 300, inverted = False):
+	def __init__(self,initial_position = 1500, P_gain = 400, D_gain = 300, I_gain = 0, inverted = False):
 		self.u0 = initial_position
 		self.inverted = inverted
 		self.firstupdate = True
 		self.P_gain = P_gain
 		self.D_gain = D_gain
+		self.I_gain = I_gain
 		self.previous_error = 0
 		self.position = 0
 		self.start = 0
 		self.sample = 0
+		self.stample = 0
+
+		'''
+		Implementer en Height PID Attenuation (HPA) for å øke
+		PID-verdiene ved landing (ca siste 10m). Ulineært system.
+		'''
+	def I_PID(self, error, sample):
+		if self.firstupdate:
+			self.previous_error = error
+			return self.I_gain * sample * error
+		else:
+			return self.I_gain * sample * error + self.I_PID(self.previous_error, self.sample)
 
 	def update(self, error):
 		if self.inverted:
 			error *= -1 
 		if self.firstupdate == False:
 			error_delta = error - self.previous_error
+			self.sample = time.time() - self.start
 			vel = (self.P_gain * error + error_delta * self.D_gain)/1024
+			self.stample = time.time() - self.start_stample
+			self.start = time.time()
 			self.position = self.u0 + vel
 			#Begrenser utslagene på servoutgangen mellom 1000us
 			#og 2000us.
 			self.position = constrain(self.position, 1000, 2000)
-			self.sample = time.time() - self.start
+
 
 			return self.position
 
 		else:
 			self.firstupdate = False
 			self.start = time.time()
+			self.start_stample = time.time()
 		self.previous_error = error
 
 
@@ -75,14 +93,15 @@ def bit_to_pixel(bit):
 	return bit
 
 
-def indikering(t = 0, i = 0, constant = False):
+def indikering(t = 0.1, i = 0, constant = False):
 	'''
 	Blinking av grønt lys for indikering av status.
 	t = tid, i = antall ganger
 	'''
-
 	if constant:
 		GPIO.output(search_light, GPIO.HIGH)
+	elif constant and i == -1:
+		GPIO.output(search_light, GPIO.LOW)
 	else:
 		x = 0
 		while x < i:
