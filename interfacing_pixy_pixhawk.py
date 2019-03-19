@@ -9,7 +9,7 @@ import datetime
 import argparse
 import exceptions
 import socket
-from pixy_spi import PWM, get_Pixy, bit_to_pixel, indikering
+from pixy_spi import PWM, get_Pixy, bit_to_pixel, pixel_to_cm, indikering
 from write_to_file import write_to_file
 import sys
 import os
@@ -78,9 +78,8 @@ except APIException:
   print "Reconnecting to vehicle on: %s" %args.connect
   vehicle = connect(args.connect, wait_ready=True, heartbeat_timeout=15)
 
-
-last_rangefinder_distance=0
 '''
+last_rangefinder_distance = 0
 @vehicle.on_attribute('rangefinder')
 def rangefinder_callback(self,attr_name):
     #attr_name not used here.
@@ -88,7 +87,7 @@ def rangefinder_callback(self,attr_name):
     if last_rangefinder_distance == round(self.rangefinder.distance, 1):
         return
     last_rangefinder_distance = round(self.rangefinder.distance, 1)
-    print " Rangefinder (metres): %s" % last_rangefinder_distance
+    #print " Rangefinder (metres): %s" % last_rangefinder_distance
 '''
 
 @vehicle.on_attribute('mode')   
@@ -267,6 +266,7 @@ if __name__ == "__main__":
         indikering(0.1, 10)
         os.system("sudo shutdown -h now")
       else:
+        #print vehicle.rangefinder.distance
         pass
 
     indikering(0.05, 20)
@@ -306,13 +306,14 @@ if __name__ == "__main__":
         if not searching:
           continue
           
-        else:          
+        else:
+          h = round(vehicle.rangefinder.distance * 100, 2)
           send = bit_to_pixel(send)
           print send
 
           #Beregner feil for PD-regulering
-          error_x = x_center - send[0]
-          error_y = y_center - send[1]
+          error_x = pixel_to_cm(x_center - send[0], h)
+          error_y = pixel_to_cm(y_center - send[1], h)
           #Setter denne feilen inn i PD-regulatoren og beregner PWM-posisjon
           pwm_roll.update(error_x)
           pwm_pitch.update(error_y)

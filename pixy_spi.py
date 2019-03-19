@@ -28,6 +28,7 @@ def constrain(val, min_, max_):
 class PWM():
 	'''PWM-klasse for motorutgangene. PWM-utgangen er PD-regulert
 	og kan inverteres etter behov.
+	I-ledd skal senere implementeres. 
 	'''
 
 	def __init__(self,initial_position = 1500, P_gain = 400, D_gain = 300, I_gain = 0, inverted = False):
@@ -40,6 +41,7 @@ class PWM():
 		self.previous_error = 0
 		self.position = 0
 		self.start = 0
+		self.start_stample = 0
 		self.sample = 0
 		self.stample = 0
 
@@ -49,7 +51,6 @@ class PWM():
 		'''
 	def I_PID(self, error, sample):
 		if self.firstupdate:
-			self.previous_error = error
 			return self.I_gain * sample * error
 		else:
 			return self.I_gain * sample * error + self.I_PID(self.previous_error, self.sample)
@@ -60,14 +61,15 @@ class PWM():
 		if self.firstupdate == False:
 			error_delta = error - self.previous_error
 			self.sample = time.time() - self.start
-			vel = (self.P_gain * error + error_delta * self.D_gain)/1024
+			#Kanskje med P_gain = 10, I_gain = 1, D_gain = 5
+			vel = (self.P_gain * error + error_delta * self.D_gain)
+			#vel = (self.P_gain * error + error_delta * self.D_gain)/1024
 			self.stample = time.time() - self.start_stample
 			self.start = time.time()
 			self.position = self.u0 + vel
 			#Begrenser utslagene på servoutgangen mellom 1000us
 			#og 2000us.
 			self.position = constrain(self.position, 1000, 2000)
-
 
 			return self.position
 
@@ -88,10 +90,14 @@ def bit_to_pixel(bit):
 	#Tar inn bit verdi(0 - 255) multipliseres med pixel-forholdstall
 	bit[0] = (bit[0]*256 + bit[1]) * x_ratios
 	bit.pop(1) 
-	bit[1] = bit[1]*y_ratios
-
+	bit[1] = bit[1]*y_ratios	
 	return bit
 
+def pixel_to_cm(pixel, h):
+	c = 0.28 #cm
+	faktor = 3e-4 #cm
+	r_cm = (pixel*faktor)/c * h #cm
+	return r_cm
 
 def indikering(t = 0.1, i = 0, constant = False):
 	'''
