@@ -1,6 +1,11 @@
 #-*- coding:utf-8 -*-
 #!/usr/bin/python
 
+'''
+FILNAVN:OLS1 
+
+'''
+
 import RPi.GPIO as GPIO
 from dronekit import connect, VehicleMode, LocationGlobalRelative, APIException
 from pymavlink import mavutil
@@ -9,7 +14,7 @@ import datetime
 import argparse
 import exceptions
 import socket
-from pixy_spi import PWM, get_Pixy, bit_to_pixel, pixel_to_cm, indikering
+from pixy_spi import PWM, get_Pixy, bit_to_pixel, indikering
 from write_to_file import write_to_file
 import sys
 import os
@@ -89,14 +94,6 @@ def rangefinder_callback(self,attr_name):
     last_rangefinder_distance = round(self.rangefinder.distance, 1)
     #print " Rangefinder (metres): %s" % last_rangefinder_distance
 '''
-
-@vehicle.on_attribute('mode')   
-def decorated_mode_callback(self, attr_name, value):
-    # `attr_name` is the observed attribute (used if callback is used for multiple attributes)
-    # `attr_name` - the observed attribute (used if callback is used for multiple attributes)
-    # `value` is the updated attribute value.
-    print "CALLBACK: Mode changed to", value
-
 def RTL_failsafe():
   if vehicle.mode.name == RTL_MODE:
     return True
@@ -130,18 +127,6 @@ def manual_flight():
       print "Found point! Activate NAV mode"
       time.sleep(0.05)
       searching = True
-
-def set_home():
-  while not vehicle.home_location:
-    cmds = vehicle.commands
-    cmds.download()
-    cmds.wait_ready()
-    print"Waiting for home location..."
-  
-  print "Home location set"
-  time.sleep(1)
-  print "Home location set at: {}".format(vehicle.home_location)
-
 
 # Function to arm and then takeoff to a user specified altitude
 def arm_and_takeoff(aTargetAltitude):
@@ -263,15 +248,33 @@ if __name__ == "__main__":
       print "Waiting..."
       if vehicle.channels['7'] > 1750:
         print "Shutting down"
-        indikering(0.1, 10)
+        indikering(0.1, 10) 
         os.system("sudo shutdown -h now")
       else:
-        #print vehicle.rangefinder.distance
+        send = get_Pixy()
+        while not send:
+          send = get_Pixy()
+        h = round(vehicle.rangefinder.distance * 100, 2)
+        print "h: %d" %h
+        sensor_height = 0.243 #cm
+        sensor_width = 0.3888 #cm
+        focal = 1.36 #cm
+        gsd_h = (h*sensor_height)/(focal*y_max)
+        gsd_w = (h*sensor_width)/(focal*x_max)
+        gsd = max(gsd_h, gsd_w)
+        #print send 
+        send = bit_to_pixel(send)
+        print send
+        error_x = (x_center - send[0]) * gsd
+        error_y = (y_center - send[1]) * gsd
+        print error_x
+        print error_y
         pass
 
     indikering(0.05, 20)
     while vehicle.armed: #While True:
       send = get_Pixy()
+      
     
       if not takeover():
         #Dersom gjenoppretting av lyspunkt:
@@ -307,13 +310,24 @@ if __name__ == "__main__":
           continue
           
         else:
-          h = round(vehicle.rangefinder.distance * 100, 2)
+          #h = round(vehicle.rangefinder.distance * 100, 2)
           send = bit_to_pixel(send)
           print send
 
           #Beregner feil for PD-regulering
-          error_x = pixel_to_cm(x_center - send[0], h)
-          error_y = pixel_to_cm(y_center - send[1], h)
+          h = round(vehicle.rangefinder.distance * 100, 2)
+          print "h: %d" %h
+          sensor_height = 0.243
+          sensor_width = 0.3888
+          focal = 0.28
+          gsd_h = (h*sensor_height)/(focal*y_max)
+          gsd_w = (h*sensor_width)/(focal*x_max)
+          gsd = max(gsd_h, gsd_w)
+          send = bit_to_pixel(send)
+          print "x = %d" %send[0]
+
+          error_x = (x_center - send[0]) * gsd
+          error_y = (y_center - send[1]) * gsd
           #Setter denne feilen inn i PD-regulatoren og beregner PWM-posisjon
           pwm_roll.update(error_x)
           pwm_pitch.update(error_y)
@@ -353,7 +367,7 @@ if __name__ == "__main__":
     vehicle.mode = VehicleMode('LOITER')
     time.sleep(0.3)
     vehicle.close()
-    GPIO.cleanup()
+    #GPIO.cleanup()
     analyze() 
   
 #Analyserer og starter eventuelt programmet på nytt om ønsket.

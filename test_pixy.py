@@ -80,42 +80,46 @@ def getBlocks(max_blocks = 2):
 		if w != 0xaa55:
 			return len(blocks)
 
-def get_Pixy():
-	send = []
-	send1 = []
+def get_Pixy(maxBlocks = 2):
+	send = [[]]
+	#send1 = []
 	lastw = [0xff, 0xff]
 	w = spi.xfer([0x5a]) #sync
 	i = 0 
+	block = 0
 
 	while True:
 		w = spi.xfer([0,0])
-
 		print w
 		if (w[0] == 0 and lastw[0] == 0) and (w[1] == 0 and lastw[1] == 0): #Ingen frame
 			return False 
 		elif (w[0] == 0xaa and lastw[0] == 0xaa) and (w[1] == 0x55 and lastw[1] == 0x55): #Nytt IR-frame
 			print "IR-frame"
 			w = spi.xfer([0,0])
-			while i < 5:
-				w = spi.xfer([0,0])
-				if i == 1: #x-posisjon
-					send.append(w[0])
-					send.append(w[1])
-				elif i == 2: #y-posisjon
-					#send.append(resp[0])
-					send.append(w[1])
-				elif i == 3: #bredde
-					send.append(w[1])
-				elif i == 4: #høyde
-					send.append(w[1])
-				time.sleep(0.01)
-				i += 1
-			w = spi.xfer([0,0])
-			print "Blokk 1: " + str(send)
-			
-			
-			if w[0] == 170 and w[1] == 85:
+			for block in range(maxBlocks):
+				while i < 5:
 					w = spi.xfer([0,0])
+					if i == 1: #x-posisjon
+						send[block].append(w[0])
+						send[block].append(w[1])
+					elif i == 2: #y-posisjon
+						#send.append(resp[0])
+						send[block].append(w[1])
+					elif i == 3: #bredde
+						send[block].append(w[1])
+					elif i == 4: #høyde
+						send[block].append(w[1])
+					time.sleep(0.01)
+					i += 1
+				w = spi.xfer([0,0])
+				print "Blokk 1: " + str(send)
+			
+				if w[0] == 170 and w[1] == 85:
+					continue
+				else:
+					break
+
+					'''w = spi.xfer([0,0])
 					print "w = " + str(w)
 					if w[0] != 170 and w[1] != 85:
 						i=0
@@ -127,7 +131,7 @@ def get_Pixy():
 						#print blokk2
 						print "Blokk 2: " + str(send1)
 				#if w[0] == 170 and w[1] == 85 and i == 6: #Nytt objekt i samme frame 
-			
+					'''
 			return True
 		lastw = w
 	'''
