@@ -2,19 +2,24 @@
 #!/usr/bin/python
 
 '''
-FILNAVN:OLS1 
+FILNAVN:OLS1
+Inneholder følgende funksjoner:
+RTL_Failsafe:
+takeover:
+... 
 
 '''
 
 import RPi.GPIO as GPIO
-from dronekit import connect, VehicleMode, LocationGlobalRelative, APIException
+from dronekit import connect, VehicleMode, APIException
 from pymavlink import mavutil
 import time
 import datetime
 import argparse
 import exceptions
 import socket
-from pixy_spi import PWM, get_Pixy, bit_to_pixel, indikering
+from pixy_spi import get_Pixy, bit_to_pixel, indikering
+from PWM import PWM
 from write_to_file import write_to_file
 import sys
 import os
@@ -22,7 +27,6 @@ import os
 #Parametre 
 lost_counter = 0
 searching = True
-
 first_check = True
 
 ###GPIO-SETUP###
@@ -38,9 +42,11 @@ NAV_MODE = "STABILIZE" #NAV_MODE = "ALT_HOLD"
 RTL_MODE = "RTL"
 MANUAL_ANGLE = 4500
 NAV_ANGLE = 3000 #Foreløpig verdi for NAV_ANGLE = 1000
+desired_rate = -40 #cm/s
 
-pwm_roll = PWM(P_gain = 700, D_gain = 250, inverted = True) 
-pwm_pitch = PWM(P_gain = 700, D_gain = 250, inverted = True) #INVERTERT BARE I SITL
+pwm_roll = PWM(P_gain = 1.5, I_gain = 0.8, D_gain = 1.1, inverted = True) #P_gain = 700, D_gain = 250
+pwm_pitch = PWM(P_gain = 1.5, I_gain = 0.8, D_gain = 1.1, inverted = True) #P_gain = 700, D_gain = 250
+pwm_throttle = PWM(P_gain = 2, D_gain = 3)
 #####
 
 ####PIXEL-SETTPUNKTER####
@@ -48,6 +54,11 @@ x_max = 640
 x_min = 0
 y_max = 400
 y_min = 0
+####PIXYCAM####
+sensor_height = 0.243
+sensor_width = 0.3888
+focal = 1.38
+
 
 x_center = (x_max - x_min)/2
 y_center = (y_max - y_min)/2
@@ -94,6 +105,7 @@ def rangefinder_callback(self,attr_name):
     last_rangefinder_distance = round(self.rangefinder.distance, 1)
     #print " Rangefinder (metres): %s" % last_rangefinder_distance
 '''
+
 def RTL_failsafe():
   if vehicle.mode.name == RTL_MODE:
     return True
@@ -166,12 +178,22 @@ def analyze():
     deres feilverdier etter at fartøyet har landet. 
     Disse plottene lagres som egne *.png - filer.
   '''
+  lostcount = 0
+  print "Analyze.."
   import matplotlib 
   matplotlib.use('Agg')
   import matplotlib.pyplot as plt
   i = 1
   for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
-    if os.path.isfile(filename):
+    
+    if not os.path.isfile(filename):
+      lostcount += 1
+      if lostcount == 4:
+        print "No files to write. "
+        return 
+      print lostcount
+      continue
+    else:
       with open(filename, 'r') as file:
         file_input = file.read().split('\n')
         output = [] 
@@ -205,10 +227,29 @@ def analyze():
           plt.title('Y-pixel: Feil')
           plt.ylabel('Feil [Pixel]')
           plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
-    else:
-      pass
-      
     i += 1  
+
+def landing_check(h, error_rate, throttle_pwm):
+  '''
+  Sjekker om fartøyet har landet. 
+  #TODO Finn ut hva som skal til for at fartøyet skal gjenkjenne at det har landet
+       
+  '''
+  if h < 20 and -10 < error_rate < 10 and 1000 <=throttle_pwm <= 1100:
+    return True
+  else:
+    return False
+
+def descend_check(error_x, error_y, boundary_x = 20, boundary_y = 20):
+  '''
+  Sjekker om fartøyet er innenfor ønskede grenser til 
+  å kunne begynne vertikal navigering.
+  '''
+  if -boundary_x <= error_x <= boundary_x and -boundary_y <= error_y <= boundary_y:
+    return True
+  else:
+    return False
+
 def after_landing():
   '''
   After landing - liste som analyserer dataen fra pixycam, renser overrides og gir 
@@ -258,18 +299,34 @@ if __name__ == "__main__":
         print "h: %d" %h
         sensor_height = 0.243 #cm
         sensor_width = 0.3888 #cm
-        focal = 1.36 #cm
+        #focal = 1.36 #cm
+        focal = 0.36936
         gsd_h = (h*sensor_height)/(focal*y_max)
         gsd_w = (h*sensor_width)/(focal*x_max)
         gsd = max(gsd_h, gsd_w)
-        #print send 
-        send = bit_to_pixel(send)
+      
+
+        if len(send) == 2 and len(send[1]) != 0:
+          #print "derp"
+          areal1 = send[0][3] * send[0][4]
+          areal2 = send[1][3] * send[1][4]
+          if areal1 > areal2:
+            send = send[0]
+          elif areal2 > areal1:
+            send = send[1]
+          send = bit_to_pixel(send)
+        #print send
+        else:
+          send = bit_to_pixel(send[0])
         print send
         error_x = (x_center - send[0]) * gsd
         error_y = (y_center - send[1]) * gsd
         print error_x
         print error_y
-        pass
+        pwm_roll.update(error_x)
+        pwm_pitch.update(error_y)
+        print pwm_roll.position
+        print pwm_pitch.position
 
     indikering(0.05, 20)
     while vehicle.armed: #While True:
@@ -314,24 +371,42 @@ if __name__ == "__main__":
           send = bit_to_pixel(send)
           print send
 
-          #Beregner feil for PD-regulering
+          
+
           h = round(vehicle.rangefinder.distance * 100, 2)
+          #For første gjennomkjøring vil det ikke være noe forandring i feil.
+          if first_check:
+            start_time = time.time()
+            previous_h = h
+          else:
+            loop_time = time.time() - start_time()
+            error_rate = (h - previous_h)/loop_time
+            previous_h = h
+            start_time = time.time()
+            
           print "h: %d" %h
-          sensor_height = 0.243
-          sensor_width = 0.3888
-          focal = 0.28
-          gsd_h = (h*sensor_height)/(focal*y_max)
-          gsd_w = (h*sensor_width)/(focal*x_max)
-          gsd = max(gsd_h, gsd_w)
           send = bit_to_pixel(send)
           print "x = %d" %send[0]
 
+          #GSD = Ground Sampling Distance
+          gsd_h = (h*sensor_height)/(focal*y_max)
+          gsd_w = (h*sensor_width)/(focal*x_max)
+          gsd = max(gsd_h, gsd_w)
+          #Beregner feil for PD-regulering
           error_x = (x_center - send[0]) * gsd
           error_y = (y_center - send[1]) * gsd
+
+
           #Setter denne feilen inn i PD-regulatoren og beregner PWM-posisjon
           pwm_roll.update(error_x)
           pwm_pitch.update(error_y)
 
+          if descend_check(error_x,error_y):
+            pwm_throttle.update(error_rate)
+            vehicle.channels.overrides = {THROTTLE: pwm_throttle.position, ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
+          else:
+            vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} ###THROTTLE-INPUT ER BARE FOR SITL###
+          time.sleep(0.05)
         
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
@@ -341,13 +416,9 @@ if __name__ == "__main__":
           write_to_file(error_x, pwm_roll.stample, 'x_feil', first_check)
           write_to_file(error_y, pwm_pitch.stample, 'y_feil', first_check)
 
-          if first_check == True:
+          if first_check:
             first_check = False
 
-          ###THROTTLE-INPUT ER BARE FOR SITL###
-          vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position}
-          time.sleep(0.05)
-           
       else:
         '''
         Ved takeover fra senderen (som merkes i form av mode-bytte) renses kanaloverskrivelsene
@@ -369,6 +440,7 @@ if __name__ == "__main__":
     vehicle.close()
     #GPIO.cleanup()
     analyze() 
+    sys.exit(0)
   
 #Analyserer og starter eventuelt programmet på nytt om ønsket.
   after_landing()
