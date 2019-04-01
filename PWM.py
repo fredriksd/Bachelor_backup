@@ -21,7 +21,7 @@ class PWM:
 	throttle-kanalen ved hjelp av en ønsket nedstigningsrate og feil.
 	update: Beregner pådraget for en PID-regulator til en PWM-kanal.
     """
-    def __init__(self,initial_position = 1500, P_gain = 400, D_gain = 300, I_gain = 0, inverted = False):
+    def __init__(self,initial_position = 1500, P_gain = 1.0, D_gain = 1.0, I_gain = 0, inverted = False):
         self.u0 = initial_position
         self.inverted = inverted
         self.firstupdate = True
@@ -54,7 +54,7 @@ class PWM:
             if (error >= 0 and self.previous_error <= 0) or (error <= 0 and self.previous_error >= 0):
                 self.previous_sum = 0
             
-            self.ui = constrain(I_PID(error, self.sample),-200, 200)
+            self.ui = constrain(I_PID(error, self.sample),-100, 100)
             
             print "ui = " + str(self.ui)
             #Kanskje med P_gain = 10, I_gain = 1, D_gain = 5?
@@ -72,7 +72,27 @@ class PWM:
             self.firstupdate = False
             self.start = time.time()
             self.start_stample = time.time()
-
+    def gain_schedule(self, h, gains):
+        if h >= 20: 
+            self.P_gain = gains[4][0]
+            self.I_gain = gains[4][1]
+            self.D_gain = gains[4][2]
+        elif h >= 15 and h < 20:
+            self.P_gain = gains[3][0]
+            self.I_gain = gains[3][1]
+            self.D_gain = gains[3][2]
+        elif h >= 10 and h < 15:
+            self.P_gain = gains[2][0]
+            self.I_gain = gains[2][1]
+            self.D_gain = gains[2][2]
+        elif h >= 5 and h < 10:
+            self.P_gain = gains[1][0]
+            self.I_gain = gains[1][1]
+            self.D_gain = gains[1][2]
+        elif h >= 0 and h < 5:
+            self.P_gain = gains[0][0]
+            self.I_gain = gains[0][1]
+            self.D_gain = gains[0][2]
 
     '''if self.throttle:
         def descend(self, error_rate):
