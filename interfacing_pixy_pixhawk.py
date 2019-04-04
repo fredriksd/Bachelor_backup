@@ -5,7 +5,12 @@
 FILNAVN:OLS1
 Inneholder følgende funksjoner:
 RTL_Failsafe:
-takeover:
+takeover: Sjekker for takeover-signal fra sender (Tx)
+manual_flight: Gir manuell kontroll tilbake til Tx. Leter samtidig etter IR-lys
+analyze: Plotter opp dataene fra de målingene tatt under presisjonslanding 
+after_landing: Samlefunksjon som kjører analyze() og gir mulighet til å restarte programmet for nytt testflyvning.
+descend_check: Sjekker om dronen er innenfor visse kriterier for initiering av vertikal navigasjon
+landing_check (IKKE FERDIG IMPLEMENTERT): Sjekker om dronen har landet. Sjekkes i sammeheng med vertikal navigasjon. 
 ... 
 
 '''
@@ -34,24 +39,30 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
 ###GAIN SCHEDULE###
-gain_schedule = [[1.5,0,1.3],
-[1.5, 0, 1.0],
-[1.1, 0, 0.8],
-[0.9, 0, 0.7],
-[0.75,0,0.7]]
+pitch_gain_schedule = [[1.0,0,1.3], #0m --> 5m
+[0.4, 0, 0.8], #5m --> 10m
+[0.8, 0, 0.8], #10m --> 15m
+[0.35, 0, 0.3], #15m --> 20m
+[0.2,0,0.2]] # 20m --> 
+roll_gain_schedule = [[1.0,0,1.3], #0m --> 5m
+[0.6, 0, 0.8], #5m --> 10m
+[0.8, 0, 0.8], #10m --> 15m
+[0.5, 0, 0.3], #15m --> 20m
+[0.5,0,0.3]] # 20m --> 
+
 
 ####RC####
-ROLL = '1' #HITL: 2 #SITL: 1
-PITCH = '2' #HITL: 3 #SITL: 2
-THROTTLE = '3' #HITL: 1 #SITL: 3
-NAV_MODE = "ALT_HOLD" #NAV_MODE = "ALT_HOLD" HARDWARE "STABILIZE"
+ROLL = '2' #HITL: 2 #SITL: 1
+PITCH = '3' #HITL: 3 #SITL: 2
+THROTTLE = '1' #HITL: 1 #SITL: 3
+NAV_MODE = "STABILIZE" #NAV_MODE = "ALT_HOLD" HARDWARE "STABILIZE"
 RTL_MODE = "RTL"
 MANUAL_ANGLE = 4500
-NAV_ANGLE = 3000 #Foreløpig verdi for NAV_ANGLE = 1000
+NAV_ANGLE = 800 #Foreløpig verdi for NAV_ANGLE = 1000. Må muligens nedjusteres.
 desired_rate = -10 #cm/s
 
-pwm_roll = PWM(P_gain = 0.75, D_gain = 0.7, inverted = True) #P_gain = 700, D_gain = 250
-pwm_pitch = PWM(P_gain = 0.75, D_gain = 0.7, inverted = True) #P_gain = 700, D_gain = 250
+pwm_roll = PWM(inverted = True) #P_gain = 700, D_gain = 250
+pwm_pitch = PWM(inverted = True) #P_gain = 700, D_gain = 250
 #pwm_throttle = PWM(P_gain = 2, D_gain = 3)
 #####
 
@@ -93,7 +104,6 @@ except exceptions.OSError as e:
   print "Reconnecting to vehicle on: %s" %args.connect
   vehicle = connect(args.connect, wait_ready=True, heartbeat_timeout=15)
 
-
 # API-error
 except APIException:
   print 'Timeout!'
@@ -113,12 +123,15 @@ def rangefinder_callback(self,attr_name):
 '''
 
 def RTL_failsafe():
+  ''' Sjekker om RTL-failsafe er aktivert. Hvis dette skjer, nullstilles overrides og overgir 
+  kontroll tilbake til Tx
+  '''
   if vehicle.mode.name == RTL_MODE:
     return True
 
 def takeover():
-  '''Funksjon for å sjekke for takeover fra radio eller GCS.'''
-  if not searching or vehicle.channels['7'] < 1750: #(ROLL and PITCH in vehicle.channels.overrides and not vehicle.mode.name == NAV_MODE) or not searching:
+  '''Boolsk funksjon for å sjekke for takeover fra radio eller GCS.'''
+  if not searching or vehicle.channels['7'] < 1750:
     return True
   elif 1750 <= vehicle.channels['7'] <= 2012 or (1750 <= vehicle.channels['7'] <= 2012 and searching):
     return False
@@ -139,6 +152,8 @@ def manual_flight():
     print "Searching..."
     time.sleep(0.05)
     potential = get_Pixy()
+    if potential:
+      print len(potential)
     if (potential and len(potential)) == 5 or (potential and len(potential) == 2):
       potential_counter += 1
     if potential_counter == 3:
@@ -183,6 +198,7 @@ def analyze():
   '''Plotter prosessutgangene for pitch og roll samt 
     deres feilverdier etter at fartøyet har landet. 
     Disse plottene lagres som egne *.png - filer.
+    Plottene blir lagret i /figurer/
   '''
   lostcount = 0
   print "Analyze.."
@@ -191,7 +207,6 @@ def analyze():
   import matplotlib.pyplot as plt
   i = 1
   for filename in ('y_utgang.txt', 'x_utgang.txt', 'x_feil.txt','y_feil.txt'):
-    
     if not os.path.isfile(filename):
       lostcount += 1
       if lostcount == 4:
@@ -218,28 +233,28 @@ def analyze():
         plt.plot(dataTime, data, markersize = 1, linestyle = 'solid')
         plt.xlabel('Tid [s]')
         if i == 1:
-          plt.title('Y-cm: Prosessutgang')
-          plt.ylabel('Prosessutgang [cm]')
-          plt.savefig('./figurer/yfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.title('Y-pixel: Prosessutgang')
+          plt.ylabel('Prosessutgang [pixel]')
+          plt.savefig('./figurer/yfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 2:
-          plt.title('X-cm: Prosessutgang')
-          plt.ylabel('Prosessutgang [cm]')
-          plt.savefig('./figurer/xfig ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.title('X-pixel: Prosessutgang')
+          plt.ylabel('Prosessutgang [pixel]')
+          plt.savefig('./figurer/xfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 3:
-          plt.title('X-pixel: Feil')
+          plt.title('X-cm: Feil')
           plt.ylabel('Feil [cm]')
-          plt.savefig('./figurer/xfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('./figurer/xfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 4:
-          plt.title('Y-pixel: Feil')
+          plt.title('Y-cm: Feil')
           plt.ylabel('Feil [cm]')
-          plt.savefig('./figurer/yfeil ' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('./figurer/yfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
     i += 1  
+  print "Graphs made. Check /figurer/ with dates " + date_name.strftime("%d%m%Y")
 
 def landing_check(h, error_rate, throttle_pwm):
   '''
   Sjekker om fartøyet har landet. 
   #TODO Finn ut hva som skal til for at fartøyet skal gjenkjenne at det har landet
-       
   '''
   if h < 20 and -10 < error_rate < 10 and 1000 <=throttle_pwm <= 1100:
     return True
@@ -250,6 +265,8 @@ def descend_check(error_x, error_y, boundary_x = 20, boundary_y = 20):
   '''
   Sjekker om fartøyet er innenfor ønskede grenser til 
   å kunne begynne vertikal navigering.
+  Grensene er satt som en boks som i default er kvadratisk 20cm*20cm
+  Boksens størrelse og form kan justeres ved å endre på boundary_x og boundary_y.
   '''
   if -boundary_x <= error_x <= boundary_x and -boundary_y <= error_y <= boundary_y:
     return True
@@ -265,12 +282,18 @@ def after_landing():
   vehicle.channels.overrides = {}
   analyze()
   indikering(constant = True)
+  print vehicle.channels 
   while not vehicle.armed:
     if vehicle.channels['7'] > 1750:
       indikering(1, 5)
       GPIO.cleanup()
       vehicle.close()
       os.execv(sys.executable, ['python'] + sys.argv)
+    elif vehicle.channels['4'] > 1850:
+      indikering(0.1, 10)
+      GPIO.cleanup()
+      vehicle.close()
+      os.system("sudo shutdown -h now")
     else:
       pass  
 
@@ -292,8 +315,8 @@ if __name__ == "__main__":
     #Hvis SF-bryteren blir høy, stopper programmet, 
     #og pi'en slås av.
 
-    '''
-    KOMMENTER INN FOR HARDWARE IN THE LOOP
+    
+    #KOMMENTER INN FOR HARDWARE IN THE LOOP
     while not vehicle.armed:
       print "Waiting..."
       if vehicle.channels['7'] > 1750:
@@ -302,42 +325,45 @@ if __name__ == "__main__":
         os.system("sudo shutdown -h now")
       else:
         pass
-    '''
-    indikering(0.05, 20)
-    arm_and_takeoff(20)
-    while True: #while vehicle.armed:
-      vehicle.mode = VehicleMode(NAV_MODE) #SITL = ALT_HOLD
-      vehicle.channels.overrides = {THROTTLE:1500} #SITL
-      send = get_Pixy()
-      
     
-      if searching: #if not takeover(): HARDWARE
+    indikering(0.05, 20)
+    #arm_and_takeoff(10) #BARE FOR SITL
+    #vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
+    #vehicle.mode = VehicleMode(NAV_MODE) #KUN FOR SITL
+    
+    while vehicle.armed:
+      send = get_Pixy()
+    
+      if not takeover(): #HARDWARE
         #Dersom gjenoppretting av lyspunkt:
         #Skift tilbake til NAV_MODE og redusere vinkelutslag
-        if vehicle.mode.name != NAV_MODE:
+        if vehicle.mode.name != NAV_MODE or vehicle.parameters["ANGLE_MAX"] == MANUAL_ANGLE:
           vehicle.mode = VehicleMode(NAV_MODE)
           time.sleep(0.05)
           vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
           time.sleep(0.05)
-        
+        #Fjerner alle overrides og setter programmet i en pass-loop
         if RTL_failsafe():
           vehicle.channels.overrides = {}
           while True:
             pass         
 
-        while not send:
+        #Sjekker for tapt data fra Pixy-kameraet.
+        while not send or (not send[0] and not send[1]):
           send = get_Pixy()
           lost_counter += 1
           time.sleep(0.05)
-
-          if lost_counter == 10: #if not pixy_search():
+          
+          #Søker 10 ganger før den gir opp søket.
+          if lost_counter == 10: 
             print 'Lost track of point...'
 
             #Resetter Firstupdate-variabelen for å resette telling. 
-            pwm_pitch.firstupdate = True
-            pwm_roll.firstupdate = True
+            #pwm_pitch.firstupdate = True
+            #pwm_roll.firstupdate = True
             time.sleep(0.05)
             searching = False
+            lost_counter = 0
             break
 
         #Begynn ny iterasjon dersom søkinga har sviktet. 
@@ -345,16 +371,9 @@ if __name__ == "__main__":
           continue
           
         else:
-          #print "Send = " + str(send)
-          #while (len(send[0]) == 0 and len(send[1]) == 0):
-          #  send = get_Pixy()
-          
-          
-
-          #h = round(vehicle.rangefinder.distance * 100, 2)
-          h = 10
-          pwm_roll.gain_schedule(h, gain_schedule)
-          pwm_pitch.gain_schedule(h, gain_schedule)
+          h = round(vehicle.rangefinder.distance * 100, 2)
+          pwm_roll.gain_schedule(h, roll_gain_schedule)
+          pwm_pitch.gain_schedule(h, pitch_gain_schedule)
           #For første gjennomkjøring vil det ikke være noe forandring i feil.
           if first_check:
             start_time = time.time()
@@ -366,8 +385,9 @@ if __name__ == "__main__":
             previous_h = h
             start_time = time.time()
             
-          #print "h: %d" %h
-          #print send
+          '''
+          Passiv filtrering av objekter. Velger objekter med størst areal.
+          '''
           if len(send) == 2 and len(send[1]) != 0:
             areal1 = send[0][3] * send[0][4]
             areal2 = send[1][3] * send[1][4]
@@ -377,7 +397,8 @@ if __name__ == "__main__":
               send = send[1]
             send = bit_to_pixel(send)
           else:
-            send = bit_to_pixel(send) #Egentlig send[0]
+            send = bit_to_pixel(send[0]) #Egentlig send[0]
+          print send
 
           #GSD = Ground Sampling Distance
           gsd_h = (h*sensor_height)/(focal*y_max)
@@ -397,8 +418,8 @@ if __name__ == "__main__":
           else:
             vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} ###THROTTLE-INPUT ER BARE FOR SITL###
           '''
-          vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} ###THROTTLE-INPUT ER BARE FOR SITL###
-          time.sleep(0.05)
+          vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} 
+          time.sleep(0.005)
         
           print "h = " + str(h)
           print "Error_x = " + str(error_x)
@@ -408,8 +429,8 @@ if __name__ == "__main__":
           
           write_to_file(send[0], pwm_roll.stample, 'x_utgang', first_check)
           write_to_file(send[1], pwm_pitch.stample, 'y_utgang', first_check)
-          write_to_file(error_x, pwm_roll.stample, 'x_feil', first_check)
-          write_to_file(error_y, pwm_pitch.stample, 'y_feil', first_check)
+          write_to_file(round(error_x,2), pwm_roll.stample, 'x_feil', first_check)
+          write_to_file(round(error_y,2), pwm_pitch.stample, 'y_feil', first_check)
 
           if first_check:
             first_check = False
@@ -420,19 +441,18 @@ if __name__ == "__main__":
         slik at en kan gjenopprette kontrollen.
         '''
         time.sleep(0.05)
-        #vehicle.channels.overrides = {} HARDWARE IN THE LOOP
-        vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
+        vehicle.channels.overrides = {} #HARDWARE IN THE LOOP
+        #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
         manual_flight()
         
 
   # Close vehicle object when testing
   except KeyboardInterrupt:
     vehicle.channels.overrides = {} #HITL
-    #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
     vehicle.mode = VehicleMode('STABILIZE')
     time.sleep(0.3)
+    indikering(constant = True, i=-1)
     vehicle.close()
-    #GPIO.cleanup()
     #analyze() KOMMENTER INN FOR HARDWARE
     sys.exit(0)
   

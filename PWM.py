@@ -1,5 +1,12 @@
 #-*- coding:utf-8 -*-
-
+"""
+FILNAVN: PWM.py
+Inneholder et PWM-objekt som brukes for styring av de fire ulike 
+kanalene til UAV. PWM-klassen inneholder følgende metoder:
+.update: Beregner pådraget for en PID-regulator til en PWM-kanal.
+.I_PID: Beregner I-leddets pådrag
+.gain_schedule: Setter PID-parametre alt etter høyden h satt som argument.
+"""
 import time
 
 def constrain(val, min_, max_):    
@@ -13,15 +20,10 @@ class PWM:
     PWM-klasse for motorutgangene. PWM-utgangen er PD-regulert og kan inverteres etter behov.
 	I-ledd skal senere implementeres. 
 	Parameterne til PID-regulatoren settes som argumenter til klassen.
-	Dersom utgangen må reverseres, settes inverted-variabelen til True. Denne står ellers lav.
-	Etter hvert skal det implementeres en throttle - PWM.
-	Inneholder følgende metoder:
-	I_PID: Beregner I-leddets pådrag
-	descend (bare for throttle-kanal): Beregner pådrag for PD-regulator som styrer
-	throttle-kanalen ved hjelp av en ønsket nedstigningsrate og feil.
-	update: Beregner pådraget for en PID-regulator til en PWM-kanal.
+	Dersom utgangen må reverseres, settes inverted-variabelen til True. Denne står lavt av default.
+
     """
-    def __init__(self,initial_position = 1500, P_gain = 1.0, D_gain = 1.0, I_gain = 0, inverted = False):
+    def __init__(self, initial_position = 1500, P_gain = 1.0, D_gain = 1.0, I_gain = 0, inverted = False):
         self.u0 = initial_position
         self.inverted = inverted
         self.firstupdate = True
@@ -39,6 +41,9 @@ class PWM:
 
 
     def update(self, error):
+        '''
+        Beregner pådraget for en PID-regulator til en PWM-kanal.
+        '''
         def I_PID(error, sample):
 		    if self.firstupdate:
 			    self.previous_sum = self.I_gain * sample * error
@@ -56,40 +61,43 @@ class PWM:
             
             self.ui = constrain(I_PID(error, self.sample),-100, 100)
             
-            print "ui = " + str(self.ui)
-            #Kanskje med P_gain = 10, I_gain = 1, D_gain = 5?
             vel = (self.P_gain * error + self.ui + error_delta * self.D_gain)
-            #vel = (self.P_gain * error + error_delta * self.D_gain)/1024
             self.stample = time.time() - self.start_stample
             self.start = time.time()
             self.position = self.u0 + vel
             #Begrenser utslagene på servoutgangen mellom 1000us
             #og 2000us.
             self.previous_error = error
-            self.position = int(constrain(self.position, 1000, 2000))
+            self.position = int(constrain(self.position, 1350, 1750))
             return self.position
         else:
             self.firstupdate = False
             self.start = time.time()
             self.start_stample = time.time()
+            
     def gain_schedule(self, h, gains):
-        if h >= 20: 
+        '''
+        Velger et sett med PID - parametre til PWM-objekt 
+        dersom høyden er innenfor et gitt intervall.
+        h: Integer i cm
+        '''
+        if h >= 2000: 
             self.P_gain = gains[4][0]
             self.I_gain = gains[4][1]
             self.D_gain = gains[4][2]
-        elif h >= 15 and h < 20:
+        elif h >= 1500 and h < 2000:
             self.P_gain = gains[3][0]
             self.I_gain = gains[3][1]
             self.D_gain = gains[3][2]
-        elif h >= 10 and h < 15:
+        elif h >= 1000 and h < 1500:
             self.P_gain = gains[2][0]
             self.I_gain = gains[2][1]
             self.D_gain = gains[2][2]
-        elif h >= 5 and h < 10:
+        elif h >= 500 and h < 1000:
             self.P_gain = gains[1][0]
             self.I_gain = gains[1][1]
             self.D_gain = gains[1][2]
-        elif h >= 0 and h < 5:
+        elif h >= 0 and h < 500:
             self.P_gain = gains[0][0]
             self.I_gain = gains[0][1]
             self.D_gain = gains[0][2]
