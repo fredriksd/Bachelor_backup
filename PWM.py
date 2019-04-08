@@ -37,7 +37,7 @@ class PWM:
         self.sample = 0
         self.stample = 0
         self.previous_sum = 0
-    
+        self.ui = 0
 
 
     def update(self, error):
@@ -59,7 +59,7 @@ class PWM:
             if (error >= 0 and self.previous_error <= 0) or (error <= 0 and self.previous_error >= 0):
                 self.previous_sum = 0
             
-            self.ui = constrain(I_PID(error, self.sample),-100, 100)
+            self.ui = constrain(I_PID(error, self.sample),-250, 250)
             
             vel = (self.P_gain * error + self.ui + error_delta * self.D_gain)
             self.stample = time.time() - self.start_stample
@@ -68,7 +68,7 @@ class PWM:
             #Begrenser utslagene på servoutgangen mellom 1000us
             #og 2000us.
             self.previous_error = error
-            self.position = int(constrain(self.position, 1350, 1750))
+            self.position = int(constrain(self.position, 1250, 1750))
             return self.position
         else:
             self.firstupdate = False

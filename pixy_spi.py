@@ -4,7 +4,6 @@ FILNAVN: pixy_spi.py
 Inneholder funksjoner som er relatert til Pixy-smartkameraet, samt funksjon for bit-til-pixel-konvertering
 Inneholder blant annet instillingsfunksjon for et indikatorlys.
 '''
-
 import spidev
 import time
 import RPi.GPIO as GPIO

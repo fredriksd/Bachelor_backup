@@ -39,14 +39,14 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
 ###GAIN SCHEDULE###
-pitch_gain_schedule = [[1.0,0,1.3], #0m --> 5m
-[0.4, 0, 0.8], #5m --> 10m
-[0.8, 0, 0.8], #10m --> 15m
+pitch_gain_schedule = [[0.6,0.9,1.4], #0m --> 5m
+[0.6, 0.9, 1.4], #5m --> 10m
+[0.6, 0.9, 1.4], #10m --> 15m
 [0.35, 0, 0.3], #15m --> 20m
 [0.2,0,0.2]] # 20m --> 
-roll_gain_schedule = [[1.0,0,1.3], #0m --> 5m
-[0.6, 0, 0.8], #5m --> 10m
-[0.8, 0, 0.8], #10m --> 15m
+roll_gain_schedule = [[0.6,0.9,1.4], #0m --> 5m
+[0.6, 0.9, 1.4], #5m --> 10m
+[0.8, 0.9, 1.4], #10m --> 15m
 [0.5, 0, 0.3], #15m --> 20m
 [0.5,0,0.3]] # 20m --> 
 
@@ -58,7 +58,7 @@ THROTTLE = '1' #HITL: 1 #SITL: 3
 NAV_MODE = "STABILIZE" #NAV_MODE = "ALT_HOLD" HARDWARE "STABILIZE"
 RTL_MODE = "RTL"
 MANUAL_ANGLE = 4500
-NAV_ANGLE = 800 #Foreløpig verdi for NAV_ANGLE = 1000. Må muligens nedjusteres.
+NAV_ANGLE = 2500 #Foreløpig verdi for NAV_ANGLE = 1000. Må muligens nedjusteres.
 desired_rate = -10 #cm/s
 
 pwm_roll = PWM(inverted = True) #P_gain = 700, D_gain = 250
@@ -148,7 +148,6 @@ def manual_flight():
   print "Manual flight..."
   vehicle.parameters["ANGLE_MAX"] = MANUAL_ANGLE
   while not searching:
-    #print vehicle.channels
     print "Searching..."
     time.sleep(0.05)
     potential = get_Pixy()
@@ -235,19 +234,23 @@ def analyze():
         if i == 1:
           plt.title('Y-pixel: Prosessutgang')
           plt.ylabel('Prosessutgang [pixel]')
-          plt.savefig('./figurer/yfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.plot([0, dataTime[-1]],[200,200], color='green', linestyle='--')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/yfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 2:
           plt.title('X-pixel: Prosessutgang')
           plt.ylabel('Prosessutgang [pixel]')
-          plt.savefig('./figurer/xfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.plot([0, dataTime[-1]],[320, 320],color='green', linestyle='--')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/xfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 3:
           plt.title('X-cm: Feil')
+          plt.plot([0, dataTime[-1]],[0,0], color='green', linestyle='--')
           plt.ylabel('Feil [cm]')
-          plt.savefig('./figurer/xfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/xfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 4:
           plt.title('Y-cm: Feil')
+          plt.plot([0, dataTime[-1]],[0,0],color='green', linestyle='--')
           plt.ylabel('Feil [cm]')
-          plt.savefig('./figurer/yfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/yfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
     i += 1  
   print "Graphs made. Check /figurer/ with dates " + date_name.strftime("%d%m%Y")
 
@@ -282,14 +285,13 @@ def after_landing():
   vehicle.channels.overrides = {}
   analyze()
   indikering(constant = True)
-  print vehicle.channels 
   while not vehicle.armed:
     if vehicle.channels['7'] > 1750:
       indikering(1, 5)
       GPIO.cleanup()
       vehicle.close()
       os.execv(sys.executable, ['python'] + sys.argv)
-    elif vehicle.channels['4'] > 1850:
+    elif vehicle.channels['4'] < 1000:
       indikering(0.1, 10)
       GPIO.cleanup()
       vehicle.close()
@@ -361,6 +363,8 @@ if __name__ == "__main__":
             #Resetter Firstupdate-variabelen for å resette telling. 
             #pwm_pitch.firstupdate = True
             #pwm_roll.firstupdate = True
+            pwm_roll.previous_sum = 0
+	    pwm_pitch.previous_sum = 0
             time.sleep(0.05)
             searching = False
             lost_counter = 0
@@ -419,13 +423,15 @@ if __name__ == "__main__":
             vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} ###THROTTLE-INPUT ER BARE FOR SITL###
           '''
           vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} 
-          time.sleep(0.005)
-        
+          time.sleep(0.005) 
+          print "Send = " + str(send)
           print "h = " + str(h)
           print "Error_x = " + str(error_x)
           print "Error_y = " + str(error_y)
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
+          print "ui_roll = " + str(pwm_roll.ui)
+          print "ui_pitch = " + str(pwm_pitch.ui)
           
           write_to_file(send[0], pwm_roll.stample, 'x_utgang', first_check)
           write_to_file(send[1], pwm_pitch.stample, 'y_utgang', first_check)
