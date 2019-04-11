@@ -61,8 +61,8 @@ MANUAL_ANGLE = 4500
 NAV_ANGLE = 2500 #Foreløpig verdi for NAV_ANGLE = 1000. Må muligens nedjusteres.
 desired_rate = -10 #cm/s
 
-pwm_roll = PWM(inverted = True) #P_gain = 700, D_gain = 250
-pwm_pitch = PWM(inverted = True) #P_gain = 700, D_gain = 250
+pwm_roll = PWM(P_gain = 0.4, D_gain = 0.8, I_gain = 0.0615, inverted = True) #P_gain = 700, D_gain = 250
+pwm_pitch = PWM(P_gain = 0.4, D_gain = 0.616, I_gain = 0.08, inverted = True) #P_gain = 700, D_gain = 250
 #pwm_throttle = PWM(P_gain = 2, D_gain = 3)
 #####
 
@@ -226,7 +226,7 @@ def analyze():
           if len(row) != 1:
             data.append(row[0])
             dataTime.append(row[1])
-        date_name = datetime.datetime.now()
+        #date_name = datetime.datetime.now()
 
         plt.figure(i)
         plt.plot(dataTime, data, markersize = 1, linestyle = 'solid')
@@ -235,24 +235,28 @@ def analyze():
           plt.title('Y-pixel: Prosessutgang')
           plt.ylabel('Prosessutgang [pixel]')
           plt.plot([0, dataTime[-1]],[200,200], color='green', linestyle='--')
-          plt.savefig('/home/pi/Bachelor_backup/figurer/yfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/yfig_Kp='+str(pwm_pitch.P_gain)+'_Kd='+str(pwm_pitch.D_gain)+'_Ki='+str(pwm_pitch.I_gain)+'.png')
+          #plt.savefig('/home/pi/Bachelor_backup/figurer/yfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 2:
           plt.title('X-pixel: Prosessutgang')
           plt.ylabel('Prosessutgang [pixel]')
           plt.plot([0, dataTime[-1]],[320, 320],color='green', linestyle='--')
-          plt.savefig('/home/pi/Bachelor_backup/figurer/xfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/xfig_Kp='+str(pwm_roll.P_gain)+'_Kd='+str(pwm_roll.D_gain)+'_Ki='+str(pwm_roll.I_gain)+'.png')
+          #plt.savefig('/home/pi/Bachelor_backup/figurer/xfig_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 3:
           plt.title('X-cm: Feil')
           plt.plot([0, dataTime[-1]],[0,0], color='green', linestyle='--')
           plt.ylabel('Feil [cm]')
-          plt.savefig('/home/pi/Bachelor_backup/figurer/xfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/xfeil_Kp='+str(pwm_roll.P_gain)+'_Kd='+str(pwm_roll.D_gain)+'_Ki='+str(pwm_roll.I_gain)+'.png')
+          #plt.savefig('/home/pi/Bachelor_backup/figurer/xfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
         elif i == 4:
           plt.title('Y-cm: Feil')
           plt.plot([0, dataTime[-1]],[0,0],color='green', linestyle='--')
           plt.ylabel('Feil [cm]')
-          plt.savefig('/home/pi/Bachelor_backup/figurer/yfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
+          plt.savefig('/home/pi/Bachelor_backup/figurer/yfeil_Kp='+str(pwm_pitch.P_gain)+'_Kd='+str(pwm_pitch.D_gain)+'_Ki='+str(pwm_pitch.I_gain)+'.png')
+          #plt.savefig('/home/pi/Bachelor_backup/figurer/yfeil_' + date_name.strftime("%d%m%Y-%H:%M:%S") + '.png')
     i += 1  
-  print "Graphs made. Check /figurer/ with dates " + date_name.strftime("%d%m%Y")
+  print "Graphs made." #Check /figurer/ with dates " + date_name.strftime("%d%m%Y")
 
 def landing_check(h, error_rate, throttle_pwm):
   '''
@@ -291,7 +295,7 @@ def after_landing():
       GPIO.cleanup()
       vehicle.close()
       os.execv(sys.executable, ['python'] + sys.argv)
-    elif vehicle.channels['4'] < 1000:
+    elif vehicle.channels[ROLL] < 1000:
       indikering(0.1, 10)
       GPIO.cleanup()
       vehicle.close()
@@ -341,9 +345,9 @@ if __name__ == "__main__":
         #Skift tilbake til NAV_MODE og redusere vinkelutslag
         if vehicle.mode.name != NAV_MODE or vehicle.parameters["ANGLE_MAX"] == MANUAL_ANGLE:
           vehicle.mode = VehicleMode(NAV_MODE)
-          time.sleep(0.05)
+          #time.sleep(0.05)
           vehicle.parameters["ANGLE_MAX"] = NAV_ANGLE
-          time.sleep(0.05)
+          #time.sleep(0.05)
         #Fjerner alle overrides og setter programmet i en pass-loop
         if RTL_failsafe():
           vehicle.channels.overrides = {}
@@ -354,7 +358,7 @@ if __name__ == "__main__":
         while not send or (not send[0] and not send[1]):
           send = get_Pixy()
           lost_counter += 1
-          time.sleep(0.05)
+          #time.sleep(0.05)
           
           #Søker 10 ganger før den gir opp søket.
           if lost_counter == 10: 
@@ -364,8 +368,11 @@ if __name__ == "__main__":
             #pwm_pitch.firstupdate = True
             #pwm_roll.firstupdate = True
             pwm_roll.previous_sum = 0
-	    pwm_pitch.previous_sum = 0
-            time.sleep(0.05)
+            pwm_pitch.previous_sum = 0
+            #time.sleep(0.05)
+            pwm_roll.sample = 0
+            pwm_roll.start = 0
+            pwm_pitch.sample = 0
             searching = False
             lost_counter = 0
             break
@@ -376,8 +383,9 @@ if __name__ == "__main__":
           
         else:
           h = round(vehicle.rangefinder.distance * 100, 2)
-          pwm_roll.gain_schedule(h, roll_gain_schedule)
-          pwm_pitch.gain_schedule(h, pitch_gain_schedule)
+          #Gain Scheduling
+          #pwm_roll.gain_schedule(h, roll_gain_schedule)
+          #pwm_pitch.gain_schedule(h, pitch_gain_schedule)
           #For første gjennomkjøring vil det ikke være noe forandring i feil.
           if first_check:
             start_time = time.time()
@@ -389,8 +397,8 @@ if __name__ == "__main__":
             previous_h = h
             start_time = time.time()
             
-          '''
-          Passiv filtrering av objekter. Velger objekter med størst areal.
+          
+          #Passiv filtrering av objekter. Velger objekter med størst areal.
           '''
           if len(send) == 2 and len(send[1]) != 0:
             areal1 = send[0][3] * send[0][4]
@@ -402,6 +410,8 @@ if __name__ == "__main__":
             send = bit_to_pixel(send)
           else:
             send = bit_to_pixel(send[0]) #Egentlig send[0]
+          '''
+          send = bit_to_pixel(send[0])
           print send
 
           #GSD = Ground Sampling Distance
@@ -422,8 +432,9 @@ if __name__ == "__main__":
           else:
             vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} ###THROTTLE-INPUT ER BARE FOR SITL###
           '''
-          vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} 
-          time.sleep(0.005) 
+          #vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} 
+          vehicle.channels.overrides = {PITCH: pwm_pitch.position}
+          #time.sleep(0.005) 
           print "Send = " + str(send)
           print "h = " + str(h)
           print "Error_x = " + str(error_x)
@@ -432,7 +443,7 @@ if __name__ == "__main__":
           print "Pitch: ", pwm_pitch.position
           print "ui_roll = " + str(pwm_roll.ui)
           print "ui_pitch = " + str(pwm_pitch.ui)
-          
+          print "sample = " + str(pwm_roll.sample)
           write_to_file(send[0], pwm_roll.stample, 'x_utgang', first_check)
           write_to_file(send[1], pwm_pitch.stample, 'y_utgang', first_check)
           write_to_file(round(error_x,2), pwm_roll.stample, 'x_feil', first_check)
@@ -446,7 +457,7 @@ if __name__ == "__main__":
         Ved takeover fra senderen (som merkes i form av mode-bytte) renses kanaloverskrivelsene
         slik at en kan gjenopprette kontrollen.
         '''
-        time.sleep(0.05)
+        #time.sleep(0.05)
         vehicle.channels.overrides = {} #HARDWARE IN THE LOOP
         #vehicle.channels.overrides = {THROTTLE: 1500} #BARE FOR SITL
         manual_flight()
@@ -459,7 +470,7 @@ if __name__ == "__main__":
     time.sleep(0.3)
     indikering(constant = True, i=-1)
     vehicle.close()
-    #analyze() KOMMENTER INN FOR HARDWARE
+    analyze() #KOMMENTER INN FOR HARDWARE
     sys.exit(0)
   
 #Analyserer og starter eventuelt programmet på nytt om ønsket.

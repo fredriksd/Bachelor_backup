@@ -47,19 +47,20 @@ class PWM:
         def I_PID(error, sample):
 		    if self.firstupdate:
 			    self.previous_sum = self.I_gain * sample * error
-			    return self.previous_sum
 		    else:
 			    self.previous_sum = self.I_gain * sample * error + self.previous_sum
-			    return self.previous_sum
+            return self.previous_sum
+
         if self.inverted:
             error *= -1 
         if self.firstupdate == False:
             error_delta = error - self.previous_error
             self.sample = time.time() - self.start
-            if (error >= 0 and self.previous_error <= 0) or (error <= 0 and self.previous_error >= 0):
-                self.previous_sum = 0
             
-            self.ui = constrain(I_PID(error, self.sample),-250, 250)
+            #Anti Windup
+           # if (error >= 0 and self.previous_error <= 0) or (error <= 0 and self.previous_error >= 0):
+           #    self.previous_sum = 0
+            self.ui = constrain(I_PID(error, self.sample),-50, 50)
             
             vel = (self.P_gain * error + self.ui + error_delta * self.D_gain)
             self.stample = time.time() - self.start_stample
