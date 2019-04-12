@@ -55,7 +55,7 @@ class PWM:
 				self.previous_sum = self.I_gain * sample * error + self.previous_sum
 			return self.previous_sum
 
-		def dist_to_speed(dist, error_delta, sample, P_gain = 1, D_gain = 1.0, speed_constrain = 250):
+		def dist_to_speed(dist, error_delta, sample, P_gain = 1, D_gain = 1.0, speed_constrain = 50):
 			'''
 			Converts horizontal distance to a velocity.
 			Maximal velocity is constrained between speed_constrain
