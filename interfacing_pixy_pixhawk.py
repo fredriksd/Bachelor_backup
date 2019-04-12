@@ -61,8 +61,8 @@ MANUAL_ANGLE = 4500
 NAV_ANGLE = 2500 #Foreløpig verdi for NAV_ANGLE = 1000. Må muligens nedjusteres.
 desired_rate = -10 #cm/s
 
-pwm_roll = PWM(P_gain = 0.4, D_gain = 0.8, I_gain = 0.0615, inverted = True) #P_gain = 700, D_gain = 250
-pwm_pitch = PWM(P_gain = 0.4, D_gain = 0.616, I_gain = 0.08, inverted = True) #P_gain = 700, D_gain = 250
+pwm_roll = PWM(P_gain = 1.2, D_gain = 0.0, I_gain = 0.5, inverted = True) #P_gain = 700, D_gain = 250
+pwm_pitch = PWM(P_gain = 0.8, D_gain = 0.0, I_gain = 0.5, inverted = True) #P_gain = 700, D_gain = 250
 #pwm_throttle = PWM(P_gain = 2, D_gain = 3)
 #####
 
@@ -355,7 +355,7 @@ if __name__ == "__main__":
             pass         
 
         #Sjekker for tapt data fra Pixy-kameraet.
-        while not send or (not send[0] and not send[1]):
+        while not send or (not send[0] and not send[1]) or (send[0][0]*256+send[0][1]) > 65535:
           send = get_Pixy()
           lost_counter += 1
           #time.sleep(0.05)
@@ -367,14 +367,17 @@ if __name__ == "__main__":
             #Resetter Firstupdate-variabelen for å resette telling. 
             #pwm_pitch.firstupdate = True
             #pwm_roll.firstupdate = True
+            #pwm_roll.sample = 0
+            #pwm_roll.start = 0
+            #pwm_pitch.sample = 0
             pwm_roll.previous_sum = 0
             pwm_pitch.previous_sum = 0
-            #time.sleep(0.05)
-            pwm_roll.sample = 0
-            pwm_roll.start = 0
-            pwm_pitch.sample = 0
-            searching = False
+            #For å ikke resette den totale telleren, brukes dette flagget til å resette 
+            #integrator-telleren.
+            pwm_roll.lostflag = True
+            pwm_pitch.lostflag = True
             lost_counter = 0
+            searching = False
             break
 
         #Begynn ny iterasjon dersom søkinga har sviktet. 
@@ -412,7 +415,7 @@ if __name__ == "__main__":
             send = bit_to_pixel(send[0]) #Egentlig send[0]
           '''
           send = bit_to_pixel(send[0])
-          print send
+          #print send
 
           #GSD = Ground Sampling Distance
           gsd_h = (h*sensor_height)/(focal*y_max)
@@ -432,18 +435,21 @@ if __name__ == "__main__":
           else:
             vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} ###THROTTLE-INPUT ER BARE FOR SITL###
           '''
-          #vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} 
-          vehicle.channels.overrides = {PITCH: pwm_pitch.position}
+          vehicle.channels.overrides = {ROLL: pwm_roll.position ,PITCH: pwm_pitch.position} 
+          #vehicle.channels.overrides = {PITCH: pwm_pitch.position}
           #time.sleep(0.005) 
           print "Send = " + str(send)
           print "h = " + str(h)
           print "Error_x = " + str(error_x)
+          print "Previous_error x = " + str(pwm_roll.previous_error)
           print "Error_y = " + str(error_y)
           print "Roll: ", pwm_roll.position
           print "Pitch: ", pwm_pitch.position
           print "ui_roll = " + str(pwm_roll.ui)
           print "ui_pitch = " + str(pwm_pitch.ui)
           print "sample = " + str(pwm_roll.sample)
+          print "Actual speed y = " + str(pwm_pitch.actual_speed)
+          print "Actual speed x = " + str(pwm_roll.actual_speed)
           write_to_file(send[0], pwm_roll.stample, 'x_utgang', first_check)
           write_to_file(send[1], pwm_pitch.stample, 'y_utgang', first_check)
           write_to_file(round(error_x,2), pwm_roll.stample, 'x_feil', first_check)

@@ -55,12 +55,12 @@ class PWM:
 				self.previous_sum = self.I_gain * sample * error + self.previous_sum
 			return self.previous_sum
 
-		def dist_to_speed(dist, P_gain = .5, speed_constrain = 250):
+		def dist_to_speed(dist, error_delta, sample, P_gain = 1, D_gain = 1.0, speed_constrain = 250):
 			'''
 			Converts horizontal distance to a velocity.
 			Maximal velocity is constrained between speed_constrain
 			'''
-			speed = P_gain * dist
+			speed = P_gain * dist + D_gain * error_delta/sample 
 			speed = constrain(speed, -speed_constrain, speed_constrain)
 			return speed
 
@@ -69,11 +69,11 @@ class PWM:
 		if self.firstupdate == False:
 			#error_delta = error - self.previous_error
 			self.sample = time.time() - self.start
-
+			error_delta = error - self.previous_error
 			#actual_speed = faktisk hastighet mot punkt
 			self.actual_speed = (self.previous_error - error)/self.sample
 			#Settpunktet beregnes ved å multiplisere feil med Kp (P = 1)
-			self.set_speed = dist_to_speed(error, self.sample)
+			self.set_speed = dist_to_speed(error, error_delta, self.sample)
 			speed_error = self.set_speed - self.actual_speed 
 			speed_error_delta = (speed_error - self.previous_speed_error)/self.sample
 
@@ -82,7 +82,7 @@ class PWM:
 		   #    self.previous_sum = 0
 
 			self.ui = constrain(I_PID(speed_error, self.sample),-50, 50)
-			vel = (self.P_gain * speed_error + self.ui + speed_error_delta * self.D_gain)
+			vel = (self.P_gain * speed_error + self.ui) # + speed_error_delta * self.D_gain)
 			self.stample = time.time() - self.start_stample
 			self.start = time.time()
 			self.position = self.u0 + vel
@@ -98,7 +98,7 @@ class PWM:
 			self.start = time.time()
 		else:
 			self.firstupdate = False
-			self.previous_error = error
+			#self.previous_error = error
 			self.start = time.time()
 			self.start_stample = time.time()
 			
