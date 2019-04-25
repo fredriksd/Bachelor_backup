@@ -35,7 +35,7 @@ def bit_to_pixel(bit):
 	bit[1] = bit[1]*y_ratios	
 	return bit
 
-def indikering(t = 0.1, i = 0, constant = False):
+def indicating(t = 0.1, i = 0, constant = False):
 	'''
 	Blinking av rødt lys for indikering av status.
 	t = tid, i = antall ganger
@@ -103,7 +103,7 @@ def get_Pixy(maxBlocks = 2):
 	return send
 
 '''
-#Sjekksum-implementering. Fungerer rart..
+#Sjekksum-implementering. Fungerer rart. Gir massiv delay og feil data.
 lastw = [0xff, 0xff]
 def get_Pixy(maxBlocks = 2):
     
