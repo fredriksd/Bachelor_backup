@@ -17,19 +17,20 @@ def constrain(val, min_, max_):
 	
 class PWM:
 	"""
-	PWM-klasse for motorutgangene. PWM-utgangen er PD-regulert og kan inverteres etter behov.
+	PWM-klasse for motorutgangene. PWM-utgangen er PD-PI-regulert og kan inverteres etter behov.
 	I-ledd skal senere implementeres. 
 	Parameterne til PID-regulatoren settes som argumenter til klassen.
 	Dersom utgangen må reverseres, settes inverted-variabelen til True. Denne står lavt av default.
-
 	"""
-	def __init__(self, initial_position = 1500, P_gain = 1.0, D_gain = 1.0, I_gain = 0, inverted = False):
+	def __init__(self, initial_position = 1500, inner_P_gain = 1.0, inner_I_gain = 1.0, outer_D_gain = 1.0, outer_P_gain = 1.0, inverted = False, vertical = False):
 		self.u0 = initial_position
 		self.inverted = inverted
+		self.vertical = vertical
 		self.firstupdate = True
-		self.P_gain = P_gain
-		self.D_gain = D_gain
-		self.I_gain = I_gain
+		self.inner_P_gain = inner_P_gain
+		self.inner_I_gain = inner_I_gain
+		self.outer_P_gain = outer_P_gain
+		self.outer_D_gain = outer_D_gain
 		self.previous_error = 0
 		self.position = 0
 		self.start = 0
@@ -42,25 +43,30 @@ class PWM:
 		self.actual_speed = 0
 		self.previous_speed_error = 0
 		self.actual_speed = 0
+		self.virtual_speed = 0
 		self.lostflag = False
 
 	def update(self, error):
 		'''
-		Beregner pådraget for en PID-regulator til en PWM-kanal.
+		Calculates the output from the PD-PI controller to an assigned PWM channel. 
+		Error is an argument given in SI units (i.e cm).
 		'''
-		def I_PID(error, sample):
+		def I_PID(error, sample, I_gain = 1):
 			if self.firstupdate:
-				self.previous_sum = self.I_gain * sample * error
+				self.previous_sum = I_gain * sample * error
 			else:
-				self.previous_sum = self.I_gain * sample * error + self.previous_sum
+				self.previous_sum = I_gain * sample * error + self.previous_sum
 			return self.previous_sum
 
-		def dist_to_speed(dist, error_delta, sample, P_gain = 1, D_gain = 1.0, speed_constrain = 250):
+		def dist_to_speed(dist, error_delta, sample, P_gain = 1.0, D_gain = 1.0, speed_constrain = 50):
 			'''
 			Converts horizontal distance to a velocity.
 			Maximal velocity is constrained between speed_constrain
 			'''
-			speed = P_gain * dist + D_gain * error_delta/sample 
+			if self.vertical:
+				speed_constrain = self.virtual_speed
+				
+			speed = P_gain * dist + (D_gain * error_delta)/sample 
 			speed = constrain(speed, -speed_constrain, speed_constrain)
 			return speed
 
@@ -73,16 +79,15 @@ class PWM:
 			#actual_speed = faktisk hastighet mot punkt
 			self.actual_speed = (self.previous_error - error)/self.sample
 			#Settpunktet beregnes ved å multiplisere feil med Kp (P = 1)
-			self.set_speed = dist_to_speed(error, error_delta, self.sample)
+			self.set_speed = dist_to_speed(error, error_delta, self.sample, P_gain = self.outer_P_gain, D_gain = self.outer_D_gain)
 			speed_error = self.set_speed - self.actual_speed 
-			speed_error_delta = (speed_error - self.previous_speed_error)/self.sample
 
-			#Anti Windup
+			#Anti Windup: Trenger kanskje ikke denne versjonen? Virker dårlig i praksis. 
 		   # if (error >= 0 and self.previous_error <= 0) or (error <= 0 and self.previous_error >= 0):
 		   #    self.previous_sum = 0
 
-			self.ui = constrain(I_PID(speed_error, self.sample),-50, 50)
-			vel = (self.P_gain * speed_error + self.ui) # + speed_error_delta * self.D_gain)
+			self.ui = constrain(I_PID(speed_error, self.sample, I_gain = self.inner_I_gain),-50, 50)
+			vel = (self.inner_P_gain * speed_error + self.ui)
 			self.stample = time.time() - self.start_stample
 			self.start = time.time()
 			self.position = self.u0 + vel
@@ -95,13 +100,15 @@ class PWM:
 
 		elif self.lostflag:
 			self.lostflag = False
-			self.start = time.time()
+			self.start = time.time()	
+		#For første gjennomkjøring vil det ikke være noe forandring i feil.
 		else:
 			self.firstupdate = False
 			#self.previous_error = error
 			self.start = time.time()
 			self.start_stample = time.time()
 			
+	#Kan dette fjernes? Trenger muligens ikke dette lengre. 
 	def gain_schedule(self, h, gains):
 		'''
 		Velger et sett med PID - parametre til PWM-objekt 
