@@ -43,7 +43,7 @@ class PWM:
 		self.actual_speed = 0
 		self.previous_speed_error = 0
 		self.actual_speed = 0
-		self.virtual_speed = 0
+		self.vertical_speed = 0
 		self.lostflag = False
 
 	def update(self, error):
@@ -64,7 +64,7 @@ class PWM:
 			Maximal velocity is constrained between speed_constrain
 			'''
 			if self.vertical:
-				speed_constrain = self.virtual_speed
+				speed_constrain = self.vertical_speed
 				
 			speed = P_gain * dist + (D_gain * error_delta)/sample 
 			speed = constrain(speed, -speed_constrain, speed_constrain)
